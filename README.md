@@ -10,7 +10,7 @@
 <p align="center">
   <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
   One script. 9 steps. Production-ready server.<br><br>
-  <a href="#quick-start">Quick Start</a> · <a href="#what-it-does">What It Does</a> · <a href="#security">Security</a> · <a href="#after-installation">Post-Install</a> · <a href="#faq">FAQ</a>
+  <a href="#-quick-start">Quick Start</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-security">Security</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-faq">FAQ</a>
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@ Most VPS come with a bare OS and no security. Hardening one manually takes hours
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 Connect to your VPS, switch to root, then run:
 
@@ -41,7 +41,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-scrip
 
 ---
 
-## What It Does
+## ⚙️ What It Does
 
 **9 interactive steps** · **~10 minutes** · visual progress bar
 
@@ -65,7 +65,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-scrip
 
 ---
 
-## Security
+## 🔒 Security
 
 The script hardens **6 layers** of your server. Everything is automatic.
 
@@ -148,7 +148,7 @@ The script hardens **6 layers** of your server. Everything is automatic.
 
 ---
 
-## SSH Key Options
+## 🔑 SSH Key Options
 
 At step 2, you choose:
 
@@ -161,7 +161,7 @@ At step 2, you choose:
 
 ---
 
-## After Installation
+## 📋 After Installation
 
 **Connect to your server:**
 
@@ -207,7 +207,7 @@ sudo netfilter-persistent save
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 .
@@ -226,7 +226,7 @@ sudo netfilter-persistent save
 
 ---
 
-## Requirements
+## 📝 Requirements
 
 - Fresh **Ubuntu 24.04 LTS** VPS
 - User with **sudo** privileges
@@ -234,7 +234,7 @@ sudo netfilter-persistent save
 
 ---
 
-## FAQ
+## ❓ FAQ
 
 <details>
 <summary><strong>What if I lose my SSH key?</strong></summary>
@@ -276,7 +276,7 @@ Designed and tested for Ubuntu 24.04 LTS. May work on 22.04 but not guaranteed.
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repo
 2. Create a feature branch
@@ -285,7 +285,7 @@ Designed and tested for Ubuntu 24.04 LTS. May work on 22.04 but not guaranteed.
 
 ---
 
-## License
+## 📄 License
 
 MIT -- see [LICENSE](LICENSE)
 

@@ -98,6 +98,17 @@ run_with_spinner() {
     gum spin --spinner dot --title "$label" -- "$@"
 }
 
+run_with_log() {
+    local label="$1"
+    shift
+    sudo -v 2>/dev/null || true
+    gum style --foreground 4 --bold "  >> $label"
+    "$@" 2>&1 | while IFS= read -r line; do
+        gum style --foreground 240 "     $line"
+    done
+    return "${PIPESTATUS[0]}"
+}
+
 log() {
     gum style --foreground 2 "  [OK] $1"
     echo ""
@@ -574,7 +585,7 @@ echo \
   sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 run_with_spinner "Updating Docker repository" sudo apt-get update -qq
-run_with_spinner "Installing Docker Engine" sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+run_with_log "Installing Docker Engine" sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker "$NEW_USER"
 log "Docker installed (official APT repo with GPG)"
 
@@ -605,7 +616,7 @@ CURRENT_STEP=9
 progress_bar $CURRENT_STEP $TOTAL_STEPS "Install Dokploy (~1-2 min)"
 SETUP_PHASE="dokploy"
 
-run_with_spinner "Installing Dokploy" bash -c 'curl -sSL https://dokploy.com/install.sh | sudo sh'
+run_with_log "Installing Dokploy" bash -c 'curl -sSL https://dokploy.com/install.sh | sudo sh'
 log "Dokploy installed"
 
 gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '
