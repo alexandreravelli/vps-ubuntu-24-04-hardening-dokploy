@@ -228,6 +228,8 @@ sudo netfilter-persistent save
 - User with **sudo** privileges
 - SSH public key ready (or let the script generate one)
 
+> **Important:** If your VPS provider has an external firewall (OVH, Hetzner, AWS, etc.), you must **open the new SSH port** in their control panel after installation. The script assigns a random port between 50000-60000 -- make sure it's allowed before closing port 22.
+
 ---
 
 ## FAQ

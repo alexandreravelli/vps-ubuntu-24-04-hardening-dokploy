@@ -626,6 +626,12 @@ gum style --border rounded --border-foreground 3 --foreground 3 --bold --padding
     "CRITICAL: Test your SSH connection before continuing"
 
 echo ""
+gum style --border rounded --border-foreground 1 --foreground 1 --padding "1 2" --margin "1 0" \
+    "WARNING: If your VPS provider has an external firewall" \
+    "(OVH, Hetzner, AWS, etc.), you MUST open port $SSH_PORT" \
+    "in their control panel BEFORE testing your connection."
+
+echo ""
 gum style --foreground 7 "  Open a NEW terminal and run:"
 echo ""
 copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
