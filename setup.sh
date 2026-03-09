@@ -290,36 +290,49 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
     sudo chmod 600 "/home/$NEW_USER/.ssh/authorized_keys"
     sudo chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
 
+    # Save key temporarily for scp download
+    TEMP_DL_PATH="/tmp/id_ed25519_$$"
+    cp "$TEMP_KEY_PATH" "$TEMP_DL_PATH"
+    chmod 600 "$TEMP_DL_PATH"
+
+    PUBLIC_IP_TMP=$(curl -s --max-time 10 ifconfig.me || echo "YOUR_SERVER_IP")
+
     echo ""
     gum style --border rounded --border-foreground 3 --foreground 3 --padding "1 2" --margin "1 0" \
         "IMPORTANT: Save your private key NOW" \
         "" \
         "This key will be DELETED from the server after this step." \
-        "Copy everything below (including BEGIN and END lines)" \
-        "and save it to a file on your local machine:" \
         "" \
-        "  Linux/Mac: ~/.ssh/id_ed25519" \
-        "  Windows:   C:\Users\YOU\.ssh\id_ed25519" \
+        "Option 1 -- Copy from below (select all text between the markers)" \
+        "Option 2 -- Download via scp from another terminal:" \
+        "" \
+        "  scp $CURRENT_USER@$PUBLIC_IP_TMP:$TEMP_DL_PATH ~/.ssh/id_ed25519" \
         "" \
         "Then set permissions:" \
         "  chmod 600 ~/.ssh/id_ed25519"
 
     echo ""
-    echo "$SSH_PRIV_KEY" | gum style --border double --border-foreground 2 --padding "1 2" --margin "0 2"
+    echo "  ---- BEGIN COPY HERE ----"
+    echo "$SSH_PRIV_KEY"
+    echo "  ---- END COPY HERE ----"
     echo ""
 
     gum style --foreground 7 "  Public key (for reference):"
-    echo "$SSH_PUB_KEY" | gum style --border rounded --border-foreground 8 --padding "0 2" --margin "0 2"
+    echo ""
+    echo "  $SSH_PUB_KEY"
     echo ""
 
     gum confirm "I have saved the private key" || {
         warn "Please save the private key before continuing!"
         echo ""
-        echo "$SSH_PRIV_KEY" | gum style --border double --border-foreground 2 --padding "1 2" --margin "0 2"
+        echo "  ---- BEGIN COPY HERE ----"
+        echo "$SSH_PRIV_KEY"
+        echo "  ---- END COPY HERE ----"
         echo ""
         gum confirm "I have saved the private key now" || error "Cannot continue without saving the private key"
     }
 
+    shred -u "$TEMP_DL_PATH" 2>/dev/null || rm -f "$TEMP_DL_PATH"
     shred -u "$TEMP_KEY_PATH" 2>/dev/null || rm -f "$TEMP_KEY_PATH"
     rm -f "$TEMP_KEY_PATH.pub"
     rmdir "$TEMP_KEY_DIR" 2>/dev/null || true
