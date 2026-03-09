@@ -166,8 +166,10 @@ At step 2, you choose:
 **Connect to your server:**
 
 ```bash
-ssh your-user@your-ip -p YOUR_PORT
+ssh your-user@your-ip -p NEW_PORT
 ```
+
+> **Important:** If your VPS provider has an external firewall (OVH, Hetzner, AWS, etc.), you must **open the new SSH port** in their control panel. The script assigns a random port between 50000-60000 -- make sure it's allowed before closing port 22.
 
 > Your SSH port and full connection command are saved in `~/.vps_setup_summary`.
 
@@ -229,8 +231,6 @@ sudo netfilter-persistent save
 - Fresh **Ubuntu 24.04 LTS** VPS
 - User with **sudo** privileges
 - SSH public key ready (or let the script generate one)
-
-> **Important:** If your VPS provider has an external firewall (OVH, Hetzner, AWS, etc.), you must **open the new SSH port** in their control panel after installation. The script assigns a random port between 50000-60000 -- make sure it's allowed before closing port 22.
 
 ---
 
