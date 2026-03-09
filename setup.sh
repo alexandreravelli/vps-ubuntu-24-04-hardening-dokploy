@@ -281,11 +281,8 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
     KEY_PASSPHRASE=""
     unset KEY_PASSPHRASE PP1 PP2
 
-    SSH_PUB_KEY=$(cat "$TEMP_KEY_PATH.pub")
-    SSH_PRIV_KEY=$(cat "$TEMP_KEY_PATH")
-
     sudo mkdir -p "/home/$NEW_USER/.ssh"
-    echo "$SSH_PUB_KEY" | sudo tee "/home/$NEW_USER/.ssh/authorized_keys" > /dev/null
+    sudo cp "$TEMP_KEY_PATH.pub" "/home/$NEW_USER/.ssh/authorized_keys"
     sudo chmod 700 "/home/$NEW_USER/.ssh"
     sudo chmod 600 "/home/$NEW_USER/.ssh/authorized_keys"
     sudo chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
@@ -295,32 +292,26 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         "IMPORTANT: Save your private key NOW" \
         "" \
         "This key will be DELETED from the server after this step." \
-        "Select and copy all text between the markers below," \
-        "then save it to a file on your local machine:" \
+        "Select from -----BEGIN to END----- (included) and copy." \
         "" \
-        "  Linux/Mac: ~/.ssh/id_ed25519" \
-        "  Windows:   C:\Users\YOU\.ssh\id_ed25519" \
+        "Save to:  ~/.ssh/id_ed25519  (Linux/Mac)" \
+        "          C:\Users\YOU\.ssh\id_ed25519  (Windows)" \
         "" \
-        "Then set permissions:" \
-        "  chmod 600 ~/.ssh/id_ed25519"
+        "Then run: chmod 600 ~/.ssh/id_ed25519"
 
     echo ""
-    echo "  ---- BEGIN COPY HERE ----"
-    echo "$SSH_PRIV_KEY"
-    echo "  ---- END COPY HERE ----"
+    cat "$TEMP_KEY_PATH"
     echo ""
 
     gum style --foreground 7 "  Public key (for reference):"
     echo ""
-    echo "  $SSH_PUB_KEY"
+    cat "$TEMP_KEY_PATH.pub"
     echo ""
 
     gum confirm "I have saved the private key" || {
         warn "Please save the private key before continuing!"
         echo ""
-        echo "  ---- BEGIN COPY HERE ----"
-        echo "$SSH_PRIV_KEY"
-        echo "  ---- END COPY HERE ----"
+        cat "$TEMP_KEY_PATH"
         echo ""
         gum confirm "I have saved the private key now" || error "Cannot continue without saving the private key"
     }
