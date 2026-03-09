@@ -299,11 +299,12 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         "" \
         "Then run: chmod 600 ~/.ssh/id_ed25519"
 
+    gum style --foreground 7 --bold "  Private key:"
     echo ""
     cat "$TEMP_KEY_PATH"
     echo ""
 
-    gum style --foreground 7 "  Public key (for reference):"
+    gum style --foreground 7 --bold "  Public key:"
     echo ""
     cat "$TEMP_KEY_PATH.pub"
     echo ""
