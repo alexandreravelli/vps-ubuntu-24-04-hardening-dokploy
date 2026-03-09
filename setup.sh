@@ -371,6 +371,8 @@ else
     sudo chmod 700 "/home/$NEW_USER/.ssh"
     sudo chmod 600 "/home/$NEW_USER/.ssh/authorized_keys"
     sudo chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
+    SSH_KEY=""
+    unset SSH_KEY
     log "SSH key configured"
 fi
 
@@ -628,7 +630,7 @@ CURRENT_STEP=9
 progress_bar $CURRENT_STEP $TOTAL_STEPS "Install Dokploy (~1-2 min)"
 SETUP_PHASE="dokploy"
 
-run_with_log "Installing Dokploy" bash -c 'curl -sSL https://dokploy.com/install.sh | sudo sh'
+run_with_log "Installing Dokploy" bash -c 'timeout 300 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
 
 gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '
@@ -709,8 +711,8 @@ findtime = 600
 EOF
         sudo systemctl restart fail2ban
 
-        sudo ufw delete allow "$SSH_PORT/tcp" > /dev/null
         sudo ufw limit "$SSH_PORT/tcp" > /dev/null
+        sudo ufw delete allow "$SSH_PORT/tcp" > /dev/null
 
         log "Port 22 closed, password auth disabled, rate limiting enabled"
     else
