@@ -8,179 +8,186 @@
 <h1 align="center">VPS Hardening Script</h1>
 
 <p align="center">
-  <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy -- a self-hostable Platform as a Service (PaaS) -- in minutes.</strong><br>
-  Interactive setup with beautiful CLI powered by <a href="https://github.com/charmbracelet/gum">gum</a>.
-</p>
-
-<p align="center">
-  <a href="#1----quick-start">1 - Quick Start</a> --
-  <a href="#2----what-it-does">2 - What It Does</a> --
-  <a href="#3----ssh-key-options">3 - SSH Key Options</a> --
-  <a href="#4----security-features">4 - Security Features</a> --
-  <a href="#5----safety-measures">5 - Safety Measures</a> --
-  <a href="#6----after-installation">6 - After Installation</a> --
-  <a href="#7----project-structure">7 - Project Structure</a> --
-  <a href="#8----requirements">8 - Requirements</a> --
-  <a href="#9----faq">9 - FAQ</a>
+  <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
+  One script. 9 steps. Production-ready server.<br><br>
+  <a href="#quick-start">Quick Start</a> · <a href="#what-it-does">What It Does</a> · <a href="#security">Security</a> · <a href="#after-installation">Post-Install</a> · <a href="#faq">FAQ</a>
 </p>
 
 ---
 
-## 1 -- Quick Start
+### Why?
 
-**Option 1 -- Switch to root first (recommended)**
+Most VPS come with a bare OS and no security. Hardening one manually takes hours and is easy to get wrong. This script does it all interactively, with a polished CLI powered by [gum](https://github.com/charmbracelet/gum), and deploys [Dokploy](https://dokploy.com) (self-hosted PaaS) on top.
+
+---
+
+## Quick Start
+
+Connect to your VPS, switch to root, then run:
 
 ```bash
 sudo -i
 ```
 
-Then run:
-
 ```bash
 curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
-**Option 2 -- One-liner (auto-escalates to root)**
-
-```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
-```
-
-> The script detects if it's not running as root and automatically re-runs itself with `sudo`. It also auto-installs [gum](https://github.com/charmbracelet/gum) for a polished terminal experience -- spinners, styled inputs, progress bars, boxed output.
+> **Not root?** No worries -- the script detects this and auto-escalates with `sudo`.
 
 ---
 
-## 2 -- What It Does
+## What It Does
 
-The script walks you through **9 interactive steps** with a visual progress bar:
+**9 interactive steps** · **~10 minutes** · visual progress bar
 
 ```
 [████████░░░░░░░░░░░░] Step 4/9 -- Kernel hardening
 ```
 
-| Step | Action | Time |
-|------|--------|------|
-| 1 | **Create admin user** -- sudo privileges + strong password policy | ~30s |
-| 2 | **Configure SSH key** -- paste existing or generate ed25519 + optional passphrase | ~10s |
-| 3 | **Update system** -- apt upgrade, 2GB swap, Quad9 DNS-over-TLS + DNSSEC | ~2-3min |
-| 4 | **Kernel hardening** -- sysctl: anti-spoofing, SYN flood, ASLR, dmesg restrict | ~5s |
-| 5 | **Security tools** -- UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades | ~1-2min |
-| 6 | **Firewall** -- UFW deny-by-default, open 80, 443, 3000, SSH | ~5s |
-| 7 | **Harden SSH** -- random port 50000-60000, key-only auth, no root | ~5s |
-| 8 | **Install Docker** -- official APT repo + GPG + DOCKER-USER firewall | ~2-3min |
-| 9 | **Install Dokploy** -- self-hosted PaaS | ~1-2min |
-
-**Total: ~8-12 minutes** depending on your VPS.
+| # | Step | What happens | Time |
+|---|------|-------------|------|
+| 1 | **User** | Create admin with sudo + strong password policy (12+ chars) | ~30s |
+| 2 | **SSH Key** | Paste existing key or generate ed25519 with optional passphrase | ~10s |
+| 3 | **System** | apt upgrade, 2GB swap, Quad9 DNS-over-TLS + DNSSEC, UTC timezone | ~2-3min |
+| 4 | **Kernel** | sysctl: anti-spoofing, SYN flood protection, ASLR, dmesg restrict | ~5s |
+| 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades | ~1-2min |
+| 6 | **Firewall** | UFW deny-by-default, allow SSH + 80 + 443 + 3000 | ~5s |
+| 7 | **SSH** | Random port 50000-60000, key-only auth, no root, double confirmation | ~5s |
+| 8 | **Docker** | Official APT repo + GPG + DOCKER-USER firewall (deny-by-default) | ~2-3min |
+| 9 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~1-2min |
 
 ---
 
-## 3 -- SSH Key Options
+## Security
+
+The script hardens **6 layers** of your server. Everything is automatic.
+
+<details>
+<summary><strong>SSH hardening</strong></summary>
+
+| Feature | Details |
+|---------|---------|
+| Custom port | Random port 50000-60000 |
+| Root login disabled | `PermitRootLogin no` |
+| Key-only auth | Password auth disabled after confirmation |
+| Brute-force protection | MaxAuthTries 3, LoginGraceTime 30s |
+| Session control | ClientAliveInterval 300s, CountMax 2 |
+| User whitelist | `AllowUsers` restricts to admin only |
+| Forwarding disabled | X11 + TCP forwarding off |
+
+</details>
+
+<details>
+<summary><strong>Network and firewall</strong></summary>
+
+| Feature | Details |
+|---------|---------|
+| UFW firewall | deny-by-default, only SSH/80/443/3000 |
+| DOCKER-USER chain | deny-by-default for Docker, only 80/443/3000 |
+| Rate limiting | 6 connections/30s per IP on SSH |
+| Fail2Ban | 3 attempts = 1h ban |
+| DNS-over-TLS | Quad9 (9.9.9.9) + DNSSEC |
+
+</details>
+
+<details>
+<summary><strong>Kernel hardening</strong></summary>
+
+| Feature | Details |
+|---------|---------|
+| Anti-spoofing | `rp_filter`, martian logging |
+| SYN flood protection | `tcp_syncookies`, tuned backlog |
+| ICMP hardening | Redirects + broadcasts blocked |
+| ASLR | Full randomization (level 2) |
+| Restricted info | dmesg + kernel pointers restricted |
+
+</details>
+
+<details>
+<summary><strong>Authentication and monitoring</strong></summary>
+
+| Feature | Details |
+|---------|---------|
+| Password policy | 12+ chars, mixed case, numbers, symbols |
+| Audit logging | sudo, auth, SSH, user/group changes |
+| AppArmor | Mandatory access control |
+| Auto-updates | Daily security patches |
+
+</details>
+
+<details>
+<summary><strong>Docker</strong></summary>
+
+| Feature | Details |
+|---------|---------|
+| Official install | APT repo with GPG, not `curl \| sh` |
+| Log rotation | 10MB max, 3 files |
+| Firewall (DOCKER-USER) | Deny-by-default, only 80/443/3000 allowed |
+
+</details>
+
+<details>
+<summary><strong>Recovery and safety</strong></summary>
+
+| Feature | Details |
+|---------|---------|
+| Error trap | Restores SSH access on port 22 if setup fails |
+| Config backup | `sshd_config.bak` saved before changes |
+| Summary file | `~/.vps_setup_summary` with all details |
+| Double confirmation | `CONFIRM` required before closing port 22 |
+| No lockout | Password auth stays on until SSH key is verified |
+| Log | Full log saved to `/var/log/vps_setup.log` |
+
+</details>
+
+---
+
+## SSH Key Options
 
 At step 2, you choose:
 
 | Option | What happens |
 |--------|-------------|
 | **Paste existing key** | You paste your `ssh-ed25519` or `ssh-rsa` public key |
-| **Generate new pair** | Script creates an ed25519 pair, shows you the private key to save, installs the public key, then **securely deletes** the private key from the server with `shred` |
+| **Generate new pair** | Script creates an ed25519 pair, displays the private key for you to save, installs the public key, then **securely deletes** the private key with `shred` |
 
-> When generating a new key pair, the script asks if you want to **protect it with a passphrase**. This adds an extra layer of security -- even if someone gets your private key file, they can't use it without the passphrase.
-
----
-
-## 4 -- Security Features
-
-<details>
-<summary><strong>Full security feature list (click to expand)</strong></summary>
-
-| Layer | Feature | Details |
-|-------|---------|---------|
-| **SSH** | Custom port | Random port 50000-60000 |
-| | Root login disabled | `PermitRootLogin no` |
-| | Key-only auth | Password auth disabled after confirmation |
-| | Brute-force protection | MaxAuthTries 3, LoginGraceTime 30s |
-| | Session control | ClientAliveInterval 300s, CountMax 2 |
-| | User whitelist | `AllowUsers` restricts to admin only |
-| | Forwarding disabled | X11 + TCP forwarding off |
-| **Network** | UFW firewall | deny-by-default, only SSH/80/443/3000 |
-| | Rate limiting | 6 connections/30s per IP on SSH |
-| | Fail2Ban | 3 attempts = 1h ban |
-| | DNS-over-TLS | Quad9 (9.9.9.9) + DNSSEC |
-| **Kernel** | Anti-spoofing | `rp_filter`, martian logging |
-| | SYN flood protection | `tcp_syncookies`, tuned backlog |
-| | ICMP hardening | Redirects + broadcasts blocked |
-| | ASLR | Full randomization (level 2) |
-| | Restricted info | dmesg + kernel pointers restricted |
-| **Auth** | Password policy | 12+ chars, mixed case, numbers, symbols |
-| | Audit logging | sudo, auth, SSH, user/group changes |
-| | AppArmor | Mandatory access control |
-| | Auto-updates | Daily security patches |
-| **Docker** | Official install | APT repo with GPG, not `curl \| sh` |
-| | Log rotation | 10MB max, 3 files |
-| | Firewall (DOCKER-USER) | Deny-by-default, only 80/443/3000 allowed |
-| **Recovery** | Error trap | Restores SSH access if setup fails |
-| | Config backup | `sshd_config.bak` saved before changes |
-| | Summary file | `~/.vps_setup_summary` with all details |
-
-</details>
+> When generating a new key pair, the script asks if you want to **protect it with a passphrase**. Even if someone gets your private key file, they can't use it without the passphrase.
 
 ---
 
-## 5 -- Safety Measures
+## After Installation
 
-The script is designed to **never lock you out**:
-
-- Password auth stays enabled until you confirm SSH key works
-- Port 22 stays open until you confirm custom port works
-- **Double confirmation** (`CONFIRM`) required before closing port 22
-- Won't auto-delete user if you're currently logged in as them
-- Error trap automatically restores SSH on port 22 if setup crashes
-- Full log saved to `/var/log/vps_setup.log`
-
----
-
-## 6 -- After Installation
-
-### Connect to your server
+**Connect to your server:**
 
 ```bash
 ssh your-user@your-ip -p YOUR_PORT
 ```
 
-### Remove default user
+**Remove default user:**
 
 ```bash
-# Interactive (asks which user)
-./cleanup.sh
-
-# Direct
-./cleanup.sh ubuntu
+./cleanup.sh          # interactive
+./cleanup.sh ubuntu   # direct
 ```
 
-### Run security audit
+**Run security audit:**
 
 ```bash
 ./check.sh
 ```
 
-Outputs a full report:
-
 ```
-  SSH Configuration
-  ------------------
   [PASS] Root login disabled
   [PASS] Password authentication disabled
   [PASS] Custom SSH port: 54821
   ...
-
-  RESULTS
   PASS: 28  FAIL: 0  WARN: 1  TOTAL: 29
-
-  Your server is mostly hardened. Review warnings above.
 ```
 
-### Lock down Dokploy (after SSL)
+**Lock down Dokploy (after configuring SSL):**
 
-The script already configures `DOCKER-USER` firewall rules (deny-by-default, allow 80, 443, 3000). After setting up SSL in Dokploy, close port 3000:
+The script already configures `DOCKER-USER` firewall rules (deny-by-default). After setting up your domain + SSL in Dokploy, close port 3000:
 
 ```bash
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
@@ -189,7 +196,7 @@ sudo netfilter-persistent save
 
 ---
 
-## 7 -- Project Structure
+## Project Structure
 
 ```
 .
@@ -199,7 +206,7 @@ sudo netfilter-persistent save
 ├── LICENSE          # MIT
 └── .github/
     ├── workflows/
-    │   └── shellcheck.yml   # CI: lint all scripts
+    │   └── shellcheck.yml
     ├── ISSUE_TEMPLATE/
     │   ├── bug_report.md
     │   └── feature_request.md
@@ -208,7 +215,7 @@ sudo netfilter-persistent save
 
 ---
 
-## 8 -- Requirements
+## Requirements
 
 - Fresh **Ubuntu 24.04 LTS** VPS
 - User with **sudo** privileges
@@ -216,12 +223,12 @@ sudo netfilter-persistent save
 
 ---
 
-## 9 -- FAQ
+## FAQ
 
 <details>
 <summary><strong>What if I lose my SSH key?</strong></summary>
 
-Use your VPS provider's console/VNC access to login, then reconfigure SSH:
+Use your VPS provider's console/VNC access, then:
 
 ```bash
 sudo nano /etc/ssh/sshd_config.d/hardening.conf
@@ -233,34 +240,32 @@ sudo systemctl restart ssh
 <details>
 <summary><strong>What if I forget my SSH port?</strong></summary>
 
-The port is saved in two places:
+Saved in two places -- access via your provider's console:
 - `/root/.vps_hardening_config`
 - `~/.vps_setup_summary`
-
-Access via your provider's console to check.
 </details>
 
 <details>
 <summary><strong>Can I run the script again?</strong></summary>
 
-The script is not idempotent -- it's designed for fresh installs. Use `check.sh` to verify your server's state instead.
+The script is designed for fresh installs. Use `check.sh` to verify your server's state instead.
 </details>
 
 <details>
 <summary><strong>Can I skip Dokploy?</strong></summary>
 
-Not currently. If you want a version without Dokploy, comment out step 9 in `setup.sh` and remove port 3000 from the firewall rules.
+Not currently. Comment out step 9 in `setup.sh` and remove port 3000 from the firewall rules.
 </details>
 
 <details>
 <summary><strong>Does it work on other Ubuntu versions?</strong></summary>
 
-Designed and tested for Ubuntu 24.04 LTS. It may work on 22.04 but is not guaranteed.
+Designed and tested for Ubuntu 24.04 LTS. May work on 22.04 but not guaranteed.
 </details>
 
 ---
 
-## 10 -- Contributing
+## Contributing
 
 1. Fork the repo
 2. Create a feature branch
@@ -269,11 +274,9 @@ Designed and tested for Ubuntu 24.04 LTS. It may work on 22.04 but is not guaran
 
 ---
 
-## 11 -- License
+## License
 
 MIT -- see [LICENSE](LICENSE)
-
----
 
 <p align="center">
   <sub>Built with <a href="https://github.com/charmbracelet/gum">gum</a> by Charmbracelet</sub>
