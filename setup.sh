@@ -83,8 +83,10 @@ progress_bar() {
     local filled=$((current * 20 / total))
     local empty=$((20 - filled))
     local green_part gray_part
-    green_part=$(printf '%*s' "$filled" '' | tr ' ' '#')
-    gray_part=$(printf '%*s' "$empty" '' | tr ' ' '-')
+    green_part=$(printf '%*s' "$filled" '' | tr ' ' '█')
+    gray_part=$(printf '%*s' "$empty" '' | tr ' ' '░')
+    echo ""
+    printf '  \033[0;90m──────────────────────────────────────────────\033[0m\n'
     echo ""
     printf '  \033[1;32m[%s\033[0;90m%s\033[1;32m]\033[0m \033[1;34mStep %s/%s\033[0m -- %s\n' \
         "$green_part" "$gray_part" "$current" "$total" "$label"
@@ -100,6 +102,7 @@ run_with_spinner() {
 
 log() {
     gum style --foreground 2 "  [OK] $1"
+    echo ""
     echo "[OK] $(date +%H:%M:%S) $1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
@@ -115,7 +118,10 @@ error() {
 }
 
 input_banner() {
-    gum style --border rounded --border-foreground 6 --foreground 6 --padding "0 1" --margin "1 0" "INPUT REQUIRED  $1"
+    echo ""
+    gum style --background 6 --foreground 0 --bold --padding "0 1" --margin "0 2" " INPUT REQUIRED "
+    gum style --foreground 6 --padding "0 1" --margin "0 2" "$1"
+    echo ""
 }
 
 copy_block() {
@@ -123,7 +129,13 @@ copy_block() {
 }
 
 table_row() {
-    printf "  \033[2m%-16s\033[0m %s\n" "$1" "$2"
+    local label="$1"
+    local value="$2"
+    local dots_len=$(( 20 - ${#label} ))
+    [ "$dots_len" -lt 2 ] && dots_len=2
+    local dots
+    dots=$(printf '%*s' "$dots_len" '' | tr ' ' '.')
+    printf "  \033[1;37m%s\033[0;90m %s \033[0m%s\n" "$label" "$dots" "$value"
 }
 
 # === WELCOME SCREEN ===
@@ -309,12 +321,12 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
     cat "$TEMP_KEY_PATH.pub"
     echo ""
 
-    gum confirm "I have saved the private key" || {
+    gum confirm --prompt.foreground 6 "I have saved the private key" || {
         warn "Please save the private key before continuing!"
         echo ""
         cat "$TEMP_KEY_PATH"
         echo ""
-        gum confirm "I have saved the private key now" || error "Cannot continue without saving the private key"
+        gum confirm --prompt.foreground 6 "I have saved the private key now" || error "Cannot continue without saving the private key"
     }
 
     shred -u "$TEMP_KEY_PATH" 2>/dev/null || rm -f "$TEMP_KEY_PATH"
