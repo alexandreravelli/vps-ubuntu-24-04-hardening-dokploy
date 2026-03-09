@@ -77,7 +77,9 @@ At step 2, you choose:
 | Option | What happens |
 |--------|-------------|
 | **Paste existing key** | You paste your `ssh-ed25519` or `ssh-rsa` public key |
-| **Generate new pair** | Script creates an ed25519 pair with optional **passphrase protection**, shows you the private key to save, installs the public key, then **securely deletes** the private key from the server with `shred` |
+| **Generate new pair** | Script creates an ed25519 pair, shows you the private key to save, installs the public key, then **securely deletes** the private key from the server with `shred` |
+
+> When generating a new key pair, the script asks if you want to **protect it with a passphrase**. This adds an extra layer of security -- even if someone gets your private key file, they can't use it without the passphrase.
 
 ---
 
