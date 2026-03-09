@@ -103,10 +103,20 @@ run_with_log() {
     shift
     sudo -v 2>/dev/null || true
     gum style --foreground 4 --bold "  >> $label"
-    "$@" 2>&1 | while IFS= read -r line; do
+    local tmpfile
+    tmpfile=$(mktemp)
+    "$@" > "$tmpfile" 2>&1 &
+    local pid=$!
+    tail -f "$tmpfile" 2>/dev/null | while IFS= read -r line; do
         gum style --foreground 240 "     $line"
-    done
-    return "${PIPESTATUS[0]}"
+    done &
+    local tail_pid=$!
+    wait "$pid"
+    local exit_code=$?
+    sleep 0.5
+    kill "$tail_pid" 2>/dev/null || true
+    rm -f "$tmpfile"
+    return "$exit_code"
 }
 
 log() {
@@ -607,6 +617,8 @@ sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
 sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
 sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
 sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -d 172.16.0.0/12 -j ACCEPT
+sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -d 10.0.0.0/8 -j ACCEPT
 sudo iptables -I DOCKER-USER -i lo -j ACCEPT
 sudo netfilter-persistent save > /dev/null 2>&1
 log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 3000)"
@@ -761,61 +773,6 @@ else
         fi
     fi
 fi
-
-# === CREATE CLEANUP SCRIPT ===
-sudo tee "/home/$NEW_USER/cleanup.sh" > /dev/null << 'CLEANUP_EOF'
-#!/bin/bash
-# Post-installation cleanup - removes old default user
-# Usage: ./cleanup.sh [username]
-set -euo pipefail
-
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-log() { echo -e "  ${GREEN}[OK]${NC} $1"; }
-warn() { echo -e "  ${YELLOW}[!]${NC} $1"; }
-error() { echo -e "  ${RED}[X]${NC} $1"; exit 1; }
-
-echo ""
-echo "  +------------------------------------------+"
-echo "  |  POST-INSTALLATION CLEANUP               |"
-echo "  +------------------------------------------+"
-echo ""
-
-CURRENT_USER=$(whoami)
-if [ $# -ge 1 ]; then
-    TARGET_USER="$1"
-else
-    echo "  Common default users: ubuntu, admin, debian"
-    read -r -p "  Which user to remove? > " TARGET_USER
-fi
-
-[ -z "$TARGET_USER" ] && error "No user specified"
-[ "$CURRENT_USER" = "$TARGET_USER" ] && error "You are logged in as '$TARGET_USER'. Login with a different user first."
-! id "$TARGET_USER" &>/dev/null && log "User '$TARGET_USER' doesn't exist (already removed)" && exit 0
-
-echo "  This will remove user '$TARGET_USER' and its home directory."
-read -r -p "  Continue? (yes/no): " CONFIRM
-[ "$CONFIRM" != "yes" ] && warn "Cleanup cancelled" && exit 0
-
-echo "  Removing user '$TARGET_USER'..."
-sudo pkill -9 -u "$TARGET_USER" 2>/dev/null || true
-sleep 2
-
-if sudo deluser --remove-home "$TARGET_USER" 2>/dev/null; then
-    log "User '$TARGET_USER' removed successfully"
-elif sudo userdel -r -f "$TARGET_USER" 2>/dev/null; then
-    log "User '$TARGET_USER' removed successfully"
-else
-    error "Could not remove '$TARGET_USER'. Try: sudo userdel -r -f $TARGET_USER"
-fi
-
-! id "$TARGET_USER" &>/dev/null && log "Verified: '$TARGET_USER' no longer exists" || warn "User still exists -- remove manually"
-echo ""
-echo "  Cleanup complete!"
-echo ""
-CLEANUP_EOF
-
-sudo chmod +x "/home/$NEW_USER/cleanup.sh"
-sudo chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER/cleanup.sh"
 
 # === CONFIG SUMMARY FILE ===
 sudo tee "/home/$NEW_USER/.vps_setup_summary" > /dev/null << EOF
