@@ -617,8 +617,8 @@ sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
 sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
 sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
 sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -d 172.16.0.0/12 -j ACCEPT
-sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -d 10.0.0.0/8 -j ACCEPT
+sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
+sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
 sudo iptables -I DOCKER-USER -i lo -j ACCEPT
 sudo netfilter-persistent save > /dev/null 2>&1
 log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 3000)"
