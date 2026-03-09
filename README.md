@@ -83,9 +83,9 @@ The script hardens **6 layers** of your server. Everything is automatic.
 
 | Feature | Details |
 |---------|---------|
-| UFW firewall | deny-by-default, only SSH/80/443/3000 |
-| DOCKER-USER chain | deny-by-default for Docker, only 80/443/3000 |
-| Rate limiting | 6 connections/30s per IP on SSH |
+| UFW firewall | deny-by-default, allow custom SSH port + 80 + 443 + 3000 |
+| DOCKER-USER chain | deny-by-default for Docker containers, allow 80 + 443 + 3000 |
+| Rate limiting | 6 connections/30s per IP on custom SSH port |
 | Fail2Ban | 3 attempts = 1h ban |
 | DNS-over-TLS | Quad9 (9.9.9.9) + DNSSEC |
 
