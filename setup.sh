@@ -281,17 +281,17 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         "  chmod 600 ~/.ssh/id_ed25519"
 
     echo ""
-    gum style --border double --border-foreground 2 --padding "1 2" --margin "0 2" "$SSH_PRIV_KEY"
+    echo "$SSH_PRIV_KEY" | gum style --border double --border-foreground 2 --padding "1 2" --margin "0 2"
     echo ""
 
     gum style --foreground 7 "  Public key (for reference):"
-    gum style --border rounded --border-foreground 8 --padding "0 2" --margin "0 2" "$SSH_PUB_KEY"
+    echo "$SSH_PUB_KEY" | gum style --border rounded --border-foreground 8 --padding "0 2" --margin "0 2"
     echo ""
 
     gum confirm "I have saved the private key" || {
         warn "Please save the private key before continuing!"
         echo ""
-        gum style --border double --border-foreground 2 --padding "1 2" --margin "0 2" "$SSH_PRIV_KEY"
+        echo "$SSH_PRIV_KEY" | gum style --border double --border-foreground 2 --padding "1 2" --margin "0 2"
         echo ""
         gum confirm "I have saved the private key now" || error "Cannot continue without saving the private key"
     }
