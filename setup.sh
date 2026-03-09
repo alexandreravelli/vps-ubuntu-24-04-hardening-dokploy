@@ -15,7 +15,11 @@ fi
 
 # === CONFIGURATION ===
 CURRENT_USER=$(whoami)
-SSH_PORT=$(shuf -i 50000-60000 -n 1)
+if command -v shuf &>/dev/null; then
+    SSH_PORT=$(shuf -i 50000-60000 -n 1)
+else
+    SSH_PORT=$(( (RANDOM % 10000) + 50000 ))
+fi
 LOG_FILE="/var/log/vps_setup.log"
 CONFIG_FILE="/root/.vps_hardening_config"
 TOTAL_STEPS=9
@@ -82,6 +86,7 @@ progress_bar() {
 run_with_spinner() {
     local label="$1"
     shift
+    sudo -v 2>/dev/null || true
     gum spin --spinner dot --title "$label" -- "$@"
 }
 
@@ -289,7 +294,7 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
 
 else
     input_banner "Paste your SSH public key (ssh-ed25519 or ssh-rsa)"
-    SSH_KEY=$(gum input --placeholder "ssh-ed25519 AAAA... or ssh-rsa AAAA..." --prompt "> " --prompt.foreground 6 --width 120)
+    SSH_KEY=$(gum write --placeholder "Paste your key here (ssh-ed25519 AAAA... or ssh-rsa AAAA...) then press Ctrl+D" --width 120 --char-limit 0)
 
     if [ -z "$SSH_KEY" ]; then
         error "SSH key cannot be empty"
@@ -320,7 +325,7 @@ sudo timedatectl set-timezone UTC
 log "Timezone set to UTC"
 
 if [ ! -f /swapfile ]; then
-    run_with_spinner "Creating 2GB swap file" bash -c 'sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile > /dev/null && sudo swapon /swapfile'
+    run_with_spinner "Creating 2GB swap file" bash -c 'sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none && sudo chmod 600 /swapfile && sudo mkswap /swapfile > /dev/null && sudo swapon /swapfile'
     echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
     if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
         echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf > /dev/null
@@ -562,7 +567,7 @@ exit 1
 progress_bar $TOTAL_STEPS $TOTAL_STEPS "All steps completed"
 SETUP_PHASE="ssh-test"
 
-PUBLIC_IP=$(curl -s ifconfig.me)
+PUBLIC_IP=$(curl -s --max-time 10 ifconfig.me || echo "UNKNOWN")
 
 gum style --border rounded --border-foreground 3 --foreground 3 --bold --padding "1 2" --margin "1 0" \
     "CRITICAL: Test your SSH connection before continuing"
