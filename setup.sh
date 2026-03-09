@@ -251,11 +251,35 @@ SSH_METHOD=$(gum choose --header "How would you like to configure SSH?" \
     "Generate a new SSH key pair for me")
 
 if [[ "$SSH_METHOD" == *"Generate"* ]]; then
+
+    # Optional passphrase
+    KEY_PASSPHRASE=""
+    if gum confirm "Protect the key with a passphrase? (adds extra security)"; then
+        input_banner "Choose a passphrase for your SSH key"
+        while true; do
+            PP1=$(gum input --password --placeholder "Passphrase" --prompt "> " --prompt.foreground 6)
+            PP2=$(gum input --password --placeholder "Confirm passphrase" --prompt "> " --prompt.foreground 6)
+            if [ -z "$PP1" ]; then
+                warn "Passphrase cannot be empty"
+                continue
+            fi
+            if [ "$PP1" != "$PP2" ]; then
+                warn "Passphrases don't match"
+                continue
+            fi
+            KEY_PASSPHRASE="$PP1"
+            break
+        done
+    fi
+
     TEMP_KEY_DIR=$(mktemp -d)
     TEMP_KEY_PATH="$TEMP_KEY_DIR/id_ed25519"
 
     gum spin --spinner dot --title "Generating ed25519 key pair..." -- \
-        ssh-keygen -t ed25519 -f "$TEMP_KEY_PATH" -N "" -C "$NEW_USER@$(hostname)"
+        ssh-keygen -t ed25519 -f "$TEMP_KEY_PATH" -N "$KEY_PASSPHRASE" -C "$NEW_USER@$(hostname)"
+
+    KEY_PASSPHRASE=""
+    unset KEY_PASSPHRASE PP1 PP2
 
     SSH_PUB_KEY=$(cat "$TEMP_KEY_PATH.pub")
     SSH_PRIV_KEY=$(cat "$TEMP_KEY_PATH")
@@ -300,7 +324,7 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
     rm -f "$TEMP_KEY_PATH.pub"
     rmdir "$TEMP_KEY_DIR" 2>/dev/null || true
 
-    log "SSH key pair generated, public key installed, private key removed from server"
+    log "SSH key pair generated (ed25519), public key installed, private key removed from server"
 
 else
     input_banner "Paste your SSH public key (ssh-ed25519 or ssh-rsa)"
