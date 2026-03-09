@@ -75,11 +75,12 @@ progress_bar() {
     local label="$3"
     local filled=$((current * 20 / total))
     local empty=$((20 - filled))
-    local bar
-    bar=$(printf '%*s' "$filled" '' | tr ' ' '#')
-    bar+=$(printf '%*s' "$empty" '' | tr ' ' '-')
+    local green_part gray_part
+    green_part=$(printf '%*s' "$filled" '' | tr ' ' '#')
+    gray_part=$(printf '%*s' "$empty" '' | tr ' ' '-')
     echo ""
-    gum style --foreground 4 --bold "[$bar] Step $current/$total -- $label"
+    printf '  \033[1;32m[%s\033[0;90m%s\033[1;32m]\033[0m \033[1;34mStep %s/%s\033[0m -- %s\n' \
+        "$green_part" "$gray_part" "$current" "$total" "$label"
     echo ""
 }
 
@@ -154,6 +155,8 @@ gum style --foreground 8 "  - SSH public key ready (or generate one)"
 echo ""
 
 gum confirm "Ready to start?" || { echo "Setup cancelled."; exit 0; }
+
+START_TIME=$SECONDS
 
 # === PRE-CHECKS ===
 progress_bar 0 $TOTAL_STEPS "Pre-flight checks"
@@ -753,6 +756,10 @@ sudo chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.vps_setup_summary"
 # === FINAL SUMMARY ===
 echo ""
 
+ELAPSED=$(( SECONDS - START_TIME ))
+ELAPSED_MIN=$(( ELAPSED / 60 ))
+ELAPSED_SEC=$(( ELAPSED % 60 ))
+
 gum style \
     --border double \
     --border-foreground 2 \
@@ -760,7 +767,9 @@ gum style \
     --margin "1 0" \
     --bold \
     --align center \
-    "SERVER READY"
+    "SERVER READY" \
+    "" \
+    "Completed in ${ELAPSED_MIN}m ${ELAPSED_SEC}s"
 
 echo ""
 table_row "SSH" "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
