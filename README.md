@@ -196,9 +196,13 @@ sudo ./check.sh
   PASS: 28  FAIL: 0  WARN: 1  TOTAL: 29
 ```
 
-**Lock down Dokploy (after configuring SSL):**
+**Secure Dokploy:**
 
-The script already configures `DOCKER-USER` firewall rules (deny-by-default). After setting up your domain + SSL in Dokploy, close port 3000:
+1. Create your admin account at `http://your-ip:3000`
+2. **Enable MFA** on your Dokploy account (Settings > Security)
+3. **Enable Isolated Deployment** on each project (prevents containers from communicating across projects)
+4. Configure your domain + SSL in Dokploy
+5. Close port 3000 (only needed for initial setup):
 
 ```bash
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
