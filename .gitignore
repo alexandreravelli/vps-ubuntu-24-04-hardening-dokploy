@@ -1,0 +1,43 @@
+# Logs
+*.log
+/var/log/
+
+# Environment
+.env
+.env.production
+.env.local
+
+# Temporary files
+*.tmp
+*.bak
+/tmp/
+
+# SSH keys
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+
+# Backup files
+*.backup
+*~
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test files
+test_output/
+
+# Documentation (kept in repo but not deployed)
+CONTRIBUTING.md
+CHANGELOG.md
+IMPROVEMENTS.md
+SSH_KEY_HELP.md
