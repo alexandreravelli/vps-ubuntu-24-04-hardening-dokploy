@@ -28,17 +28,18 @@
 
 ```bash
 sudo -i
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/setup.sh -o setup.sh
-chmod +x setup.sh
-./setup.sh
 ```
 
-**Option 2 -- Run directly (auto-escalates to root)**
+Then run:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/setup.sh -o setup.sh
-chmod +x setup.sh
-./setup.sh
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+```
+
+**Option 2 -- One-liner (auto-escalates to root)**
+
+```bash
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 > The script detects if it's not running as root and automatically re-runs itself with `sudo`. It also auto-installs [gum](https://github.com/charmbracelet/gum) for a polished terminal experience -- spinners, styled inputs, progress bars, boxed output.
