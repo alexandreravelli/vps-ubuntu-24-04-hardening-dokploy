@@ -616,6 +616,16 @@ done
 exit 1
 ' && log "Dokploy is running" || warn "Dokploy did not respond within 60s -- it may still be starting"
 
+# === DOWNLOAD POST-INSTALL SCRIPTS ===
+REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main"
+USER_HOME=$(eval echo "~$NEW_USER")
+for script in cleanup.sh check.sh; do
+    curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script"
+    chmod +x "$USER_HOME/$script"
+    chown "$NEW_USER:$NEW_USER" "$USER_HOME/$script"
+done
+log "Post-install scripts downloaded (cleanup.sh, check.sh)"
+
 # === TEST SSH CONNECTION ===
 progress_bar $TOTAL_STEPS $TOTAL_STEPS "All steps completed"
 SETUP_PHASE="ssh-test"

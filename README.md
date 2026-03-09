@@ -173,8 +173,9 @@ ssh your-user@your-ip -p YOUR_PORT
 
 **Remove default user:**
 
+> Both scripts are automatically downloaded to your home directory during setup.
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/cleanup.sh -o cleanup.sh && chmod +x cleanup.sh
 sudo ./cleanup.sh          # interactive
 sudo ./cleanup.sh ubuntu   # direct
 ```
@@ -182,7 +183,6 @@ sudo ./cleanup.sh ubuntu   # direct
 **Run security audit:**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS/main/check.sh -o check.sh && chmod +x check.sh
 sudo ./check.sh
 ```
 

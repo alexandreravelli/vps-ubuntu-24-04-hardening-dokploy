@@ -3,46 +3,52 @@
 # Usage: ./cleanup.sh [username]
 set -euo pipefail
 
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-log() { echo -e "  ${GREEN}[OK]${NC} $1"; }
-warn() { echo -e "  ${YELLOW}[!]${NC} $1"; }
-error() { echo -e "  ${RED}[X]${NC} $1"; exit 1; }
+# === INSTALL GUM IF NEEDED ===
+if ! command -v gum &>/dev/null; then
+    echo "Installing gum..."
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list > /dev/null
+    sudo apt-get update -qq && sudo apt-get install -y -qq gum
+fi
+
+log() { gum style --foreground 2 "  [OK] $1"; }
+warn() { gum style --foreground 3 "  [!] $1"; }
+error() { gum style --foreground 1 --bold "  [X] $1"; exit 1; }
 
 echo ""
-echo "  +------------------------------------------+"
-echo "  |  POST-INSTALLATION CLEANUP               |"
-echo "  +------------------------------------------+"
+gum style --border rounded --border-foreground 4 --padding "1 2" --margin "0 2" \
+    "POST-INSTALLATION CLEANUP"
 echo ""
 
 CURRENT_USER=$(whoami)
 if [ $# -ge 1 ]; then
     TARGET_USER="$1"
 else
-    echo "  Common default users: ubuntu, admin, debian"
-    read -r -p "  Which user to remove? > " TARGET_USER
+    gum style --foreground 7 "  Common default users: ubuntu, admin, debian"
+    TARGET_USER=$(gum input --placeholder "Which user to remove?" --prompt "> " --prompt.foreground 6)
 fi
 
 [ -z "$TARGET_USER" ] && error "No user specified"
 [ "$CURRENT_USER" = "$TARGET_USER" ] && error "You are logged in as '$TARGET_USER'. Login with a different user first."
 ! id "$TARGET_USER" &>/dev/null && log "User '$TARGET_USER' doesn't exist (already removed)" && exit 0
 
-echo "  This will remove user '$TARGET_USER' and its home directory."
-read -r -p "  Continue? (yes/no): " CONFIRM
-[ "$CONFIRM" != "yes" ] && warn "Cleanup cancelled" && exit 0
+gum style --foreground 3 "  This will remove user '$TARGET_USER' and its home directory."
+gum confirm "Continue?" || { warn "Cleanup cancelled"; exit 0; }
 
-echo "  Removing user '$TARGET_USER'..."
-sudo pkill -9 -u "$TARGET_USER" 2>/dev/null || true
-sleep 2
+gum spin --spinner dot --title "Removing user '$TARGET_USER'..." -- bash -c "
+    sudo pkill -9 -u '$TARGET_USER' 2>/dev/null || true
+    sleep 2
+    sudo deluser --remove-home '$TARGET_USER' 2>/dev/null || sudo userdel -r -f '$TARGET_USER' 2>/dev/null
+"
 
-if sudo deluser --remove-home "$TARGET_USER" 2>/dev/null; then
+if ! id "$TARGET_USER" &>/dev/null; then
     log "User '$TARGET_USER' removed successfully"
-elif sudo userdel -r -f "$TARGET_USER" 2>/dev/null; then
-    log "User '$TARGET_USER' removed successfully"
+    log "Verified: '$TARGET_USER' no longer exists"
 else
-    error "Could not remove '$TARGET_USER'. Try: sudo userdel -r -f $TARGET_USER"
+    warn "User still exists -- remove manually"
 fi
 
-! id "$TARGET_USER" &>/dev/null && log "Verified: '$TARGET_USER' no longer exists" || warn "User still exists -- remove manually"
 echo ""
-echo "  Cleanup complete!"
+gum style --foreground 2 --bold "  Cleanup complete!"
 echo ""

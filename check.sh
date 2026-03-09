@@ -12,45 +12,45 @@ if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     exit 0
 fi
 
-# === COLORS ===
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-DIM='\033[2m'
-BOLD='\033[1m'
-NC='\033[0m'
+# === INSTALL GUM IF NEEDED ===
+if ! command -v gum &>/dev/null; then
+    echo "Installing gum..."
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list > /dev/null
+    sudo apt-get update -qq && sudo apt-get install -y -qq gum
+fi
 
 PASS_COUNT=0
 FAIL_COUNT=0
 WARN_COUNT=0
 
 pass() {
-    echo -e "  ${GREEN}[PASS]${NC} $1"
+    gum style --foreground 2 "  [PASS] $1"
     ((PASS_COUNT++))
 }
 
 fail() {
-    echo -e "  ${RED}[FAIL]${NC} $1"
+    gum style --foreground 1 --bold "  [FAIL] $1"
     ((FAIL_COUNT++))
 }
 
 warn_check() {
-    echo -e "  ${YELLOW}[WARN]${NC} $1"
+    gum style --foreground 3 "  [WARN] $1"
     ((WARN_COUNT++))
 }
 
 section() {
     echo ""
-    echo -e "  ${BOLD}$1${NC}"
-    echo -e "  ${DIM}$(printf '%*s' ${#1} '' | tr ' ' '-')${NC}"
+    gum style --bold "  $1"
+    gum style --foreground 240 "  $(printf '%*s' ${#1} '' | tr ' ' '-')"
 }
 
 # === HEADER ===
 echo ""
-echo "  +------------------------------------------+"
-echo "  |  VPS HARDENING CHECK  v$VERSION            |"
-echo "  |  Post-install security audit             |"
-echo "  +------------------------------------------+"
+gum style --border rounded --border-foreground 4 --padding "1 2" --margin "0 2" \
+    "VPS HARDENING CHECK  v$VERSION" \
+    "Post-install security audit"
 
 # === SSH ===
 section "SSH Configuration"
@@ -318,18 +318,17 @@ fi
 TOTAL=$((PASS_COUNT + FAIL_COUNT + WARN_COUNT))
 
 echo ""
-echo "  +------------------------------------------+"
-echo -e "  |  ${BOLD}RESULTS${NC}                                  |"
-echo "  +------------------------------------------+"
-echo ""
-echo -e "  ${GREEN}PASS: $PASS_COUNT${NC}  ${RED}FAIL: $FAIL_COUNT${NC}  ${YELLOW}WARN: $WARN_COUNT${NC}  ${DIM}TOTAL: $TOTAL${NC}"
-echo ""
+gum style --border rounded --border-foreground 4 --bold --padding "1 2" --margin "0 2" \
+    "RESULTS" \
+    "" \
+    "PASS: $PASS_COUNT  FAIL: $FAIL_COUNT  WARN: $WARN_COUNT  TOTAL: $TOTAL"
 
+echo ""
 if [ "$FAIL_COUNT" -eq 0 ] && [ "$WARN_COUNT" -eq 0 ]; then
-    echo -e "  ${GREEN}${BOLD}Your server is fully hardened.${NC}"
+    gum style --foreground 2 --bold "  Your server is fully hardened."
 elif [ "$FAIL_COUNT" -eq 0 ]; then
-    echo -e "  ${YELLOW}${BOLD}Your server is mostly hardened. Review warnings above.${NC}"
+    gum style --foreground 3 --bold "  Your server is mostly hardened. Review warnings above."
 else
-    echo -e "  ${RED}${BOLD}Your server has security issues. Fix failures above.${NC}"
+    gum style --foreground 1 --bold "  Your server has security issues. Fix failures above."
 fi
 echo ""
