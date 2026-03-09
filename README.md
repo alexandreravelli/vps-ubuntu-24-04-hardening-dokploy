@@ -13,16 +13,18 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> --
-  <a href="#what-it-does">What It Does</a> --
-  <a href="#security-features">Security</a> --
-  <a href="#after-installation">Post-Install</a> --
-  <a href="#faq">FAQ</a>
+  <a href="#1----quick-start">1 - Quick Start</a> --
+  <a href="#2----what-it-does">2 - What It Does</a> --
+  <a href="#3----ssh-key-options">3 - SSH Key Options</a> --
+  <a href="#4----security-features">4 - Security Features</a> --
+  <a href="#5----safety-measures">5 - Safety Measures</a> --
+  <a href="#6----after-installation">6 - After Installation</a> --
+  <a href="#9----faq">9 - FAQ</a>
 </p>
 
 ---
 
-## Quick Start
+## 1 -- Quick Start
 
 **Option 1 -- Switch to root first (recommended)**
 
@@ -46,7 +48,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-scrip
 
 ---
 
-## What It Does
+## 2 -- What It Does
 
 The script walks you through **9 interactive steps** with a visual progress bar:
 
@@ -70,7 +72,7 @@ The script walks you through **9 interactive steps** with a visual progress bar:
 
 ---
 
-## SSH Key Options
+## 3 -- SSH Key Options
 
 At step 2, you choose:
 
@@ -83,7 +85,7 @@ At step 2, you choose:
 
 ---
 
-## Security Features
+## 4 -- Security Features
 
 <details>
 <summary><strong>Full security feature list (click to expand)</strong></summary>
@@ -120,7 +122,7 @@ At step 2, you choose:
 
 ---
 
-## Safety Measures
+## 5 -- Safety Measures
 
 The script is designed to **never lock you out**:
 
@@ -133,7 +135,7 @@ The script is designed to **never lock you out**:
 
 ---
 
-## After Installation
+## 6 -- After Installation
 
 ### Connect to your server
 
@@ -184,7 +186,7 @@ sudo netfilter-persistent save
 
 ---
 
-## Project Structure
+## 7 -- Project Structure
 
 ```
 .
@@ -203,7 +205,7 @@ sudo netfilter-persistent save
 
 ---
 
-## Requirements
+## 8 -- Requirements
 
 - Fresh **Ubuntu 24.04 LTS** VPS
 - User with **sudo** privileges
@@ -211,7 +213,7 @@ sudo netfilter-persistent save
 
 ---
 
-## FAQ
+## 9 -- FAQ
 
 <details>
 <summary><strong>What if I lose my SSH key?</strong></summary>
@@ -255,7 +257,7 @@ Designed and tested for Ubuntu 24.04 LTS. It may work on 22.04 but is not guaran
 
 ---
 
-## Contributing
+## 10 -- Contributing
 
 1. Fork the repo
 2. Create a feature branch
@@ -264,7 +266,7 @@ Designed and tested for Ubuntu 24.04 LTS. It may work on 22.04 but is not guaran
 
 ---
 
-## License
+## 11 -- License
 
 MIT -- see [LICENSE](LICENSE)
 
