@@ -8,7 +8,7 @@
 <h1 align="center">VPS Hardening Script</h1>
 
 <p align="center">
-  <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
+  <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy -- a self-hostable Platform as a Service (PaaS) -- in minutes.</strong><br>
   Interactive setup with beautiful CLI powered by <a href="https://github.com/charmbracelet/gum">gum</a>.
 </p>
 
