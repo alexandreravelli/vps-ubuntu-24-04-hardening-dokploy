@@ -137,21 +137,21 @@ gum style \
 echo ""
 gum style --foreground 7 --bold "  This script will:"
 echo ""
-gum style --foreground 8 "  1. Create a secure admin user"
-gum style --foreground 8 "  2. Configure SSH key authentication"
-gum style --foreground 8 "  3. Update system + swap + DNS-over-TLS"
-gum style --foreground 8 "  4. Apply kernel hardening (sysctl)"
-gum style --foreground 8 "  5. Install security tools (UFW, Fail2Ban, auditd...)"
-gum style --foreground 8 "  6. Configure firewall"
-gum style --foreground 8 "  7. Harden SSH on a random port"
-gum style --foreground 8 "  8. Install Docker (official repo)"
-gum style --foreground 8 "  9. Install Dokploy"
+gum style --foreground 7 "  1. Create a secure admin user"
+gum style --foreground 7 "  2. Configure SSH key authentication"
+gum style --foreground 7 "  3. Update system + swap + DNS-over-TLS"
+gum style --foreground 7 "  4. Apply kernel hardening (sysctl)"
+gum style --foreground 7 "  5. Install security tools (UFW, Fail2Ban, auditd...)"
+gum style --foreground 7 "  6. Configure firewall"
+gum style --foreground 7 "  7. Harden SSH on a random port"
+gum style --foreground 7 "  8. Install Docker (official repo)"
+gum style --foreground 7 "  9. Install Dokploy"
 echo ""
 gum style --foreground 7 --bold "  Prerequisites:"
 echo ""
-gum style --foreground 8 "  - Fresh Ubuntu 24.04 LTS VPS"
-gum style --foreground 8 "  - User with sudo privileges"
-gum style --foreground 8 "  - SSH public key ready (or generate one)"
+gum style --foreground 7 "  - Fresh Ubuntu 24.04 LTS VPS"
+gum style --foreground 7 "  - User with sudo privileges"
+gum style --foreground 7 "  - SSH public key ready (or generate one)"
 echo ""
 
 gum confirm "Ready to start?" || { echo "Setup cancelled."; exit 0; }
@@ -632,10 +632,10 @@ else
     echo ""
     gum style --foreground 7 "  Fix the issue, then run these commands manually:"
     echo ""
-    gum style --foreground 8 "  sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf"
-    gum style --foreground 8 "  sudo sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf"
-    gum style --foreground 8 "  sudo systemctl restart ssh"
-    gum style --foreground 8 "  sudo ufw delete allow 22/tcp"
+    gum style --foreground 7 "  sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf"
+    gum style --foreground 7 "  sudo sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf"
+    gum style --foreground 7 "  sudo systemctl restart ssh"
+    gum style --foreground 7 "  sudo ufw delete allow 22/tcp"
 fi
 
 # === OPTIONAL: REMOVE OLD USER ===
@@ -655,10 +655,10 @@ else
         warn "Cannot auto-remove '$OLD_USER' -- you're currently logged in as this user"
         echo ""
         gum style --foreground 7 "  To remove this user safely:"
-        gum style --foreground 8 "  1. Disconnect from this session"
-        gum style --foreground 8 "  2. Login as '$NEW_USER':"
+        gum style --foreground 7 "  1. Disconnect from this session"
+        gum style --foreground 7 "  2. Login as '$NEW_USER':"
         copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
-        gum style --foreground 8 "  3. Run: sudo deluser --remove-home $OLD_USER"
+        gum style --foreground 7 "  3. Run: sudo deluser --remove-home $OLD_USER"
     else
         if gum confirm "Remove user '$OLD_USER'?"; then
             sudo pkill -9 -u "$OLD_USER" 2>/dev/null || true
@@ -670,7 +670,7 @@ else
                 log "User '$OLD_USER' removed"
             else
                 warn "Could not remove '$OLD_USER' automatically"
-                gum style --foreground 8 "  Try manually: sudo userdel -r -f $OLD_USER"
+                gum style --foreground 7 "  Try manually: sudo userdel -r -f $OLD_USER"
             fi
 
             if ! id "$OLD_USER" &>/dev/null; then
@@ -680,7 +680,7 @@ else
             fi
         else
             warn "User '$OLD_USER' NOT removed"
-            gum style --foreground 8 "  Remove later with: sudo deluser --remove-home $OLD_USER"
+            gum style --foreground 7 "  Remove later with: sudo deluser --remove-home $OLD_USER"
         fi
     fi
 fi
@@ -790,12 +790,12 @@ copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
 
 gum style --foreground 7 --bold "  Next steps:"
 echo ""
-gum style --foreground 8 "  1. Reconnect as $NEW_USER"
-gum style --foreground 8 "  2. Run ./cleanup.sh to remove old default user"
-gum style --foreground 8 "  3. Run ./check.sh to verify hardening status"
-gum style --foreground 8 "  4. Access Dokploy and create admin account"
-gum style --foreground 8 "  5. Configure your domain + SSL in Dokploy"
-gum style --foreground 8 "  6. After SSL, block port 3000:"
+gum style --foreground 7 "  1. Reconnect as $NEW_USER"
+gum style --foreground 7 "  2. Run ./cleanup.sh to remove old default user"
+gum style --foreground 7 "  3. Run ./check.sh to verify hardening status"
+gum style --foreground 7 "  4. Access Dokploy and create admin account"
+gum style --foreground 7 "  5. Configure your domain + SSL in Dokploy"
+gum style --foreground 7 "  6. After SSL, block port 3000:"
 echo ""
 copy_block "sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j DROP && sudo iptables -I DOCKER-USER -i lo -p tcp --dport 3000 -j ACCEPT && sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save"
 
