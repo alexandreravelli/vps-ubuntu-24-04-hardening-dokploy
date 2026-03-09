@@ -19,6 +19,8 @@
   <a href="#4----security-features">4 - Security Features</a> --
   <a href="#5----safety-measures">5 - Safety Measures</a> --
   <a href="#6----after-installation">6 - After Installation</a> --
+  <a href="#7----project-structure">7 - Project Structure</a> --
+  <a href="#8----requirements">8 - Requirements</a> --
   <a href="#9----faq">9 - FAQ</a>
 </p>
 
@@ -53,20 +55,20 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-scrip
 The script walks you through **9 interactive steps** with a visual progress bar:
 
 ```
-[########------------] Step 4/9 -- Kernel hardening
+[████████░░░░░░░░░░░░] Step 4/9 -- Kernel hardening
 ```
 
 | Step | Action | Time |
 |------|--------|------|
-| 1 | **Create admin user** -- new sudo user with strong password | ~30s |
-| 2 | **Configure SSH key** -- paste existing OR generate new ed25519 pair | ~10s |
-| 3 | **Update system** -- apt upgrade, 2GB swap, Quad9 DNS-over-TLS | ~2-3min |
-| 4 | **Kernel hardening** -- sysctl (anti-spoofing, SYN flood, ASLR...) | ~5s |
-| 5 | **Security tools** -- UFW, Fail2Ban, auditd, AppArmor, auto-updates | ~1-2min |
-| 6 | **Firewall** -- deny-by-default, open only needed ports | ~5s |
-| 7 | **Harden SSH** -- random port, disable root, key-only auth | ~5s |
-| 8 | **Install Docker** -- official APT repo with GPG verification | ~2-3min |
-| 9 | **Install Dokploy** -- self-hosted deployment platform | ~1-2min |
+| 1 | **Create admin user** -- sudo privileges + strong password policy | ~30s |
+| 2 | **Configure SSH key** -- paste existing or generate ed25519 + optional passphrase | ~10s |
+| 3 | **Update system** -- apt upgrade, 2GB swap, Quad9 DNS-over-TLS + DNSSEC | ~2-3min |
+| 4 | **Kernel hardening** -- sysctl: anti-spoofing, SYN flood, ASLR, dmesg restrict | ~5s |
+| 5 | **Security tools** -- UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades | ~1-2min |
+| 6 | **Firewall** -- UFW deny-by-default, open 80, 443, 3000, SSH | ~5s |
+| 7 | **Harden SSH** -- random port 50000-60000, key-only auth, no root | ~5s |
+| 8 | **Install Docker** -- official APT repo + GPG + DOCKER-USER firewall | ~2-3min |
+| 9 | **Install Dokploy** -- self-hosted PaaS | ~1-2min |
 
 **Total: ~8-12 minutes** depending on your VPS.
 
