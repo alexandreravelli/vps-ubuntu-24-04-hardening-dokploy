@@ -13,8 +13,15 @@ if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     exit 0
 fi
 
+# === ROOT CHECK ===
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script requires root privileges."
+    echo "Re-running with sudo..."
+    exec sudo bash "$0" "$@"
+fi
+
 # === CONFIGURATION ===
-CURRENT_USER=$(whoami)
+CURRENT_USER="${SUDO_USER:-$(whoami)}"
 if command -v shuf &>/dev/null; then
     SSH_PORT=$(shuf -i 50000-60000 -n 1)
 else
