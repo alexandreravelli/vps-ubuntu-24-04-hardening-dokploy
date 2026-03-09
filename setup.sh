@@ -129,7 +129,7 @@ gum style \
     --margin "1 0" \
     --bold \
     --align center \
-    "VPS HARDENING SCRIPT  v$VERSION" \
+    "VPS HARDENING SCRIPT" \
     "" \
     "Ubuntu 24.04 LTS + Dokploy" \
     "Secure your server in minutes"
