@@ -13,6 +13,10 @@
   <a href="#quick-start">Quick Start</a> · <a href="#what-it-does">What It Does</a> · <a href="#security">Security</a> · <a href="#after-installation">Post-Install</a> · <a href="#faq">FAQ</a>
 </p>
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="VPS Hardening Script welcome screen" width="700">
+</p>
+
 ---
 
 ### Why?
