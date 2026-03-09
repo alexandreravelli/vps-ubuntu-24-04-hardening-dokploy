@@ -82,14 +82,12 @@ progress_bar() {
     local label="$3"
     local filled=$((current * 20 / total))
     local empty=$((20 - filled))
-    local green_part gray_part
-    green_part=$(printf '%*s' "$filled" '' | tr ' ' '█')
-    gray_part=$(printf '%*s' "$empty" '' | tr ' ' '░')
+    local bar
+    bar="$(printf '%*s' "$filled" '' | tr ' ' '=')$(printf '%*s' "$empty" '' | tr ' ' ' ')"
     echo ""
-    printf '  \033[0;90m──────────────────────────────────────────────\033[0m\n'
+    gum style --foreground 240 "  ----------------------------------------------"
     echo ""
-    printf '  \033[1;32m[%s\033[0;90m%s\033[1;32m]\033[0m \033[1;34mStep %s/%s\033[0m -- %s\n' \
-        "$green_part" "$gray_part" "$current" "$total" "$label"
+    gum style --bold "  [$(gum style --foreground 2 "$bar")] $(gum style --foreground 4 --bold "Step $current/$total") -- $label"
     echo ""
 }
 

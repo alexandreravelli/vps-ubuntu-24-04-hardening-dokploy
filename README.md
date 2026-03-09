@@ -46,7 +46,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-hardening-scrip
 **9 interactive steps** · **~10 minutes** · visual progress bar
 
 ```
-[████████░░░░░░░░░░░░] Step 4/9 -- Kernel hardening
+[========            ] Step 4/9 -- Kernel hardening
 ```
 
 | # | Step | What happens | Time |
