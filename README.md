@@ -114,6 +114,7 @@ At step 2, you choose:
 | | Auto-updates | Daily security patches |
 | **Docker** | Official install | APT repo with GPG, not `curl \| sh` |
 | | Log rotation | 10MB max, 3 files |
+| | Firewall (DOCKER-USER) | Deny-by-default, only 80/443/3000 allowed |
 | **Recovery** | Error trap | Restores SSH access if setup fails |
 | | Config backup | `sshd_config.bak` saved before changes |
 | | Summary file | `~/.vps_setup_summary` with all details |
@@ -177,10 +178,10 @@ Outputs a full report:
 
 ### Lock down Dokploy (after SSL)
 
+The script already configures `DOCKER-USER` firewall rules (deny-by-default, allow 80, 443, 3000). After setting up SSL in Dokploy, close port 3000:
+
 ```bash
-sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j DROP
-sudo iptables -I DOCKER-USER -i lo -p tcp --dport 3000 -j ACCEPT
-sudo apt-get install -y iptables-persistent
+sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
 sudo netfilter-persistent save
 ```
 

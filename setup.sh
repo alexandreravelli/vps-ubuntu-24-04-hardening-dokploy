@@ -590,6 +590,18 @@ EOF
 sudo systemctl restart docker
 log "Docker log rotation configured"
 
+# Docker firewall: deny-by-default on DOCKER-USER, allow only needed ports
+run_with_spinner "Installing iptables-persistent" bash -c 'echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections && echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections && sudo apt-get install -y -qq iptables-persistent'
+
+sudo iptables -I DOCKER-USER -j DROP
+sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
+sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
+sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
+sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -I DOCKER-USER -i lo -j ACCEPT
+sudo netfilter-persistent save > /dev/null 2>&1
+log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 3000)"
+
 # === STEP 9: INSTALL DOKPLOY ===
 CURRENT_STEP=9
 progress_bar $CURRENT_STEP $TOTAL_STEPS "Install Dokploy (~1-2 min)"
@@ -835,8 +847,8 @@ gum style --foreground 7 "  2. Run ./cleanup.sh to remove old default user"
 gum style --foreground 7 "  3. Run ./check.sh to verify hardening status"
 gum style --foreground 7 "  4. Access Dokploy and create admin account"
 gum style --foreground 7 "  5. Configure your domain + SSL in Dokploy"
-gum style --foreground 7 "  6. After SSL, block port 3000:"
+gum style --foreground 7 "  6. After SSL, close port 3000:"
 echo ""
-copy_block "sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j DROP && sudo iptables -I DOCKER-USER -i lo -p tcp --dport 3000 -j ACCEPT && sudo apt-get install -y iptables-persistent && sudo netfilter-persistent save"
+copy_block "sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT && sudo netfilter-persistent save"
 
 printf '\a'
