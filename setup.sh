@@ -826,11 +826,9 @@ AllowUsers $NEW_USER
 EOF
         # Validate config
         sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
-        # Restart standalone sshd with new config (no password auth, AllowUsers applied)
-        # Port 22 session is unaffected -- we never touch ssh.socket
-        sudo kill "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
-        sleep 1
-        sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
+        # Reload standalone sshd config with SIGHUP -- applies new AllowUsers/PasswordAuthentication
+        # to new connections without dropping existing sessions (sshd forks per connection)
+        sudo kill -HUP "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
         # Block port 22 at firewall level -- ssh.socket keeps running but nothing can reach it
         # It will stop permanently on next reboot (disabled in step 7)
         # Delete both IPv4 and IPv6 rules (ufw adds them separately)
