@@ -34,10 +34,9 @@ CURRENT_STEP=0
 
 # === CLEANUP TRAP (pre-gum safe) ===
 SETUP_PHASE="init"
-HAS_GUM=false
 cleanup_on_error() {
     local exit_code=$?
-    if [ $exit_code -ne 0 ]; then
+    if [ "$exit_code" -ne 0 ]; then
         echo ""
         printf "  \033[1;31m──────────────────────────────────────────────\033[0m\n"
         printf "  \033[1;31m[ERROR] SETUP FAILED during phase: %s\033[0m\n" "$SETUP_PHASE"
@@ -46,13 +45,13 @@ cleanup_on_error() {
 
         if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ]; then
             echo ""
-            echo -e "\033[1;33m[!] Restoring SSH access on port 22 as a safety measure...\033[0m"
+            printf "  \033[1;33m[!] Restoring SSH access on port 22 as a safety measure...\033[0m\n"
             sudo ufw allow 22/tcp 2>/dev/null || true
             if [ -f /etc/ssh/sshd_config.bak ]; then
                 sudo cp /etc/ssh/sshd_config.bak /etc/ssh/sshd_config 2>/dev/null || true
                 sudo systemctl restart ssh 2>/dev/null || true
             fi
-            echo -e "\033[1;33m[!] Port 22 restored. You should still have access.\033[0m"
+            printf "  \033[1;33m[!] Port 22 restored. You should still have access.\033[0m\n"
         fi
     fi
 }
@@ -67,7 +66,6 @@ if ! command -v gum &>/dev/null; then
     sudo apt-get update -qq
     sudo apt-get install -y -qq gum
 fi
-HAS_GUM=true
 
 # === UI FUNCTIONS ===
 
@@ -182,7 +180,7 @@ gum confirm "Ready to start?" || { echo "Setup cancelled."; exit 0; }
 START_TIME=$SECONDS
 
 # === PRE-CHECKS ===
-progress_bar 0 $TOTAL_STEPS "Pre-flight checks"
+progress_bar 0 "$TOTAL_STEPS" "Pre-flight checks"
 SETUP_PHASE="pre-checks"
 
 sudo touch "$LOG_FILE"
@@ -207,7 +205,7 @@ log "All pre-checks passed"
 
 # === STEP 1: CREATE USER ===
 CURRENT_STEP=1
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Create secure user"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Create secure user"
 SETUP_PHASE="user-creation"
 
 input_banner "Choose a username for your admin account"
@@ -259,7 +257,7 @@ log "Sudo access granted"
 
 # === STEP 2: SSH KEY ===
 CURRENT_STEP=2
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Configure SSH key"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Configure SSH key"
 SETUP_PHASE="ssh-key"
 
 SSH_METHOD=$(gum choose --header "How would you like to configure SSH?" \
@@ -364,7 +362,7 @@ fi
 
 # === STEP 3: SYSTEM UPDATE ===
 CURRENT_STEP=3
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Update system (~2-3 min)"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Update system (~2-3 min)"
 SETUP_PHASE="system-update"
 
 run_with_spinner "Updating package lists" sudo apt-get update -qq
@@ -399,7 +397,7 @@ log "Quad9 DNS configured with DNS-over-TLS + DNSSEC"
 
 # === STEP 4: KERNEL HARDENING ===
 CURRENT_STEP=4
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Kernel hardening (sysctl)"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Kernel hardening (sysctl)"
 SETUP_PHASE="kernel-hardening"
 
 sudo tee /etc/sysctl.d/99-hardening.conf > /dev/null << EOF
@@ -449,7 +447,7 @@ log "Kernel hardening applied"
 
 # === STEP 5: INSTALL SECURITY TOOLS ===
 CURRENT_STEP=5
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Install security tools (~1-2 min)"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install security tools (~1-2 min)"
 SETUP_PHASE="security-tools"
 
 run_with_spinner "Installing UFW, Fail2Ban, auditd, pwquality" sudo apt-get install -y -qq ufw fail2ban unattended-upgrades libpam-pwquality auditd
@@ -524,7 +522,7 @@ log "Fail2Ban configured (ports 22 and $SSH_PORT)"
 
 # === STEP 6: CONFIGURE FIREWALL ===
 CURRENT_STEP=6
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Configure firewall"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Configure firewall"
 SETUP_PHASE="firewall"
 
 sudo ufw --force reset > /dev/null
@@ -540,7 +538,7 @@ log "Firewall configured (ports: 22, $SSH_PORT, 80, 443, 3000)"
 
 # === STEP 7: CONFIGURE SSH ===
 CURRENT_STEP=7
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Harden SSH"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Harden SSH"
 SETUP_PHASE="ssh"
 
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
@@ -569,7 +567,7 @@ log "SSH hardened (ports: 22 + $SSH_PORT, password auth still enabled)"
 
 # === STEP 8: INSTALL DOCKER ===
 CURRENT_STEP=8
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Install Docker (~2-3 min)"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Docker (~2-3 min)"
 SETUP_PHASE="docker"
 
 run_with_spinner "Installing Docker prerequisites" sudo apt-get install -y -qq ca-certificates curl gnupg
@@ -633,7 +631,7 @@ log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 30
 
 # === STEP 9: INSTALL DOKPLOY ===
 CURRENT_STEP=9
-progress_bar $CURRENT_STEP $TOTAL_STEPS "Install Dokploy (~1-2 min)"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~1-2 min)"
 SETUP_PHASE="dokploy"
 
 run_with_log "Installing Dokploy" bash -c 'timeout 300 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
@@ -658,7 +656,7 @@ done
 log "Post-install scripts downloaded (cleanup.sh, check.sh)"
 
 # === TEST SSH CONNECTION ===
-progress_bar $TOTAL_STEPS $TOTAL_STEPS "All steps completed"
+progress_bar "$TOTAL_STEPS" "$TOTAL_STEPS" "All steps completed"
 SETUP_PHASE="ssh-test"
 
 PUBLIC_IP=$(curl -s --max-time 10 ifconfig.me || echo "UNKNOWN")
