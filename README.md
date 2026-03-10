@@ -31,6 +31,15 @@ Most VPS come with a bare OS and no security. Hardening one manually takes hours
 - User with **sudo** privileges
 - SSH public key ready (or let the script generate one)
 
+> **External firewall (OVH, Hetzner, AWS, etc.):** If your VPS provider has a network-level firewall, open the following ports in their control panel **before** running the script:
+> | Port | Protocol | Purpose | When to close |
+> |------|----------|---------|---------------|
+> | 22 | TCP | SSH (default, script will move it) | After confirming new SSH port works |
+> | 80 | TCP | HTTP / SSL certificate validation | Keep open |
+> | 443 | TCP | HTTPS | Keep open |
+> | 3000 | TCP | Dokploy initial setup | After configuring your domain + SSL |
+> | 50000-60000 | TCP | New SSH port (random, assigned by script) | Keep open |
+
 ---
 
 ## 🚀 Quick Start
