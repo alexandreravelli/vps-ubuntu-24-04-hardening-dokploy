@@ -611,6 +611,15 @@ EOF
 sudo systemctl restart docker
 log "Docker log rotation configured"
 
+# Initialize Docker Swarm (required for Dokploy/Traefik)
+if ! sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
+    SWARM_ADDR=$(curl -s --max-time 10 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
+    run_with_spinner "Initializing Docker Swarm" sudo docker swarm init --advertise-addr "$SWARM_ADDR"
+    log "Docker Swarm initialized (required for Traefik)"
+else
+    log "Docker Swarm already active"
+fi
+
 # Docker firewall: deny-by-default on DOCKER-USER, allow only needed ports
 run_with_spinner "Installing iptables-persistent" bash -c 'echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections && echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections && sudo apt-get install -y -qq iptables-persistent'
 
@@ -622,6 +631,17 @@ sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEP
 sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
 sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
 sudo iptables -I DOCKER-USER -i lo -j ACCEPT
+
+# Same rules for IPv6 (if Docker manages ip6tables)
+if sudo ip6tables -L DOCKER-USER &>/dev/null 2>&1; then
+    sudo ip6tables -I DOCKER-USER -j DROP 2>/dev/null || true
+    sudo ip6tables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+    sudo ip6tables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+    sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
+    sudo ip6tables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+    sudo ip6tables -I DOCKER-USER -i lo -j ACCEPT 2>/dev/null || true
+fi
+
 sudo netfilter-persistent save > /dev/null 2>&1
 log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 3000)"
 

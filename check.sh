@@ -138,6 +138,18 @@ else
     fail "UFW is NOT active"
 fi
 
+if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
+    pass "DOCKER-USER deny-by-default rule present"
+else
+    warn_check "DOCKER-USER DROP rule missing -- Docker containers may be exposed"
+fi
+
+if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -qE "dpt:80|dpt:443"; then
+    pass "DOCKER-USER allows ports 80 and 443"
+else
+    warn_check "DOCKER-USER missing ACCEPT rules for 80/443"
+fi
+
 # === FAIL2BAN ===
 section "Fail2Ban"
 
@@ -301,17 +313,36 @@ if command -v docker &>/dev/null; then
     else
         fail "Docker service NOT running"
     fi
+
+    if sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
+        pass "Docker Swarm active (required for Traefik)"
+    else
+        fail "Docker Swarm NOT active -- Traefik cannot start (run: docker swarm init)"
+    fi
 else
     fail "Docker NOT installed"
 fi
 
-# === DOKPLOY ===
-section "Dokploy"
+# === DOKPLOY / TRAEFIK ===
+section "Dokploy / Traefik"
 
 if curl -s --max-time 5 http://localhost:3000 &>/dev/null; then
     pass "Dokploy responding on port 3000"
 else
     warn_check "Dokploy not responding on port 3000"
+fi
+
+if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q traefik; then
+    pass "Traefik container running"
+else
+    fail "Traefik container NOT running -- ports 80/443 are dead"
+fi
+
+if curl -s --max-time 5 http://localhost:80 &>/dev/null || \
+   curl -sk --max-time 5 https://localhost:443 &>/dev/null; then
+    pass "Web server responding on port 80/443"
+else
+    fail "Nothing responding on port 80/443 -- check Traefik"
 fi
 
 # === SUMMARY ===
