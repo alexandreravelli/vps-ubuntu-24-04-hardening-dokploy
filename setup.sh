@@ -662,7 +662,7 @@ exit 1
 ' && log "Dokploy is running" || warn "Dokploy did not respond within 60s -- it may still be starting"
 
 # === DOWNLOAD POST-INSTALL SCRIPTS ===
-REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu2404-hardening-dokploy/main"
+REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
 USER_HOME=$(eval echo "~$NEW_USER")
 for script in cleanup.sh check.sh; do
     curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script"
