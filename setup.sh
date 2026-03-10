@@ -397,6 +397,14 @@ progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Update system (~2-3 min)"
 SETUP_PHASE="system-update"
 
 run_with_spinner "Updating package lists" sudo apt-get update -qq
+# Prevent apt/needrestart from restarting SSH during upgrade -- would kill the active session.
+# openssh-server post-install calls systemctl restart ssh which stops ssh.socket and kills connections.
+sudo mkdir -p /etc/needrestart/conf.d
+sudo tee /etc/needrestart/conf.d/99-no-ssh-restart.conf > /dev/null << 'NEEDRESTART'
+# Do not auto-restart sshd during package upgrades (would kill active SSH sessions)
+$nrconf{override_rc}{q(ssh)} = 0;
+$nrconf{override_rc}{q(sshd)} = 0;
+NEEDRESTART
 run_with_spinner "Upgrading packages" sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq
 log "System updated"
 
@@ -810,7 +818,9 @@ EOF
         sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
         # Block port 22 at firewall level -- ssh.socket keeps running but nothing can reach it
         # It will stop permanently on next reboot (disabled in step 7)
-        sudo ufw delete allow 22/tcp
+        # Delete both IPv4 and IPv6 rules (ufw adds them separately)
+        sudo ufw delete allow 22/tcp 2>/dev/null || true
+        sudo ufw delete allow from any to any port 22 proto tcp 2>/dev/null || true
 
         sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
 [sshd]
