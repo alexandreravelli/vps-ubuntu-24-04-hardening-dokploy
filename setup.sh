@@ -176,7 +176,9 @@ printf "  \033[1mPrerequisites:\033[0m\n"
 echo ""
 printf "  - Fresh Ubuntu 24.04 LTS VPS\n"
 printf "  - User with sudo privileges\n"
-printf "  - SSH public key ready (or generate one)\n"
+printf "  - SSH public key ready (ssh-ed25519 recommended) -- or generate one\n"
+printf "  - External firewall (OVH, Hetzner, AWS...): open ports 22, 80, 443, 3000\n"
+printf "    before running -- the script will show you the final SSH port at the end\n"
 echo ""
 
 gum confirm "Ready to start?" || { echo "Setup cancelled."; exit 0; }
