@@ -195,7 +195,7 @@ gum style \
     --margin "0 2" \
     "⚠  EXTERNAL FIREWALL (OVH, Hetzner, AWS...)" \
     "Open these ports BEFORE running the script:" \
-    "22 (SSH)  ·  80 (HTTP)  ·  443 (HTTPS)  ·  3000 (Dokploy)" \
+    "22  ·  80  ·  443  ·  3000 (Dokploy)" \
     "The final custom SSH port will be shown at the end."
 
 echo ""
