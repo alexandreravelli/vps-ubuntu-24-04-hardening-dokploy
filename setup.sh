@@ -681,33 +681,54 @@ else
     log "Docker Swarm already active"
 fi
 
-# Docker firewall: deny-by-default on DOCKER-USER, allow only needed ports
-run_with_spinner "Installing iptables-persistent" bash -c 'echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections && echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections && sudo apt-get install -y -qq iptables-persistent'
+# Docker firewall: deny-by-default on DOCKER-USER, allow only needed ports.
+# We use a systemd service instead of iptables-persistent because ufw and
+# iptables-persistent conflict on Ubuntu 24.04 (installing one removes the other).
+# The service re-applies rules after every Docker restart (which flushes DOCKER-USER).
 
-run_with_spinner "Configuring DOCKER-USER firewall rules" bash -c '
-    sudo iptables -I DOCKER-USER -j DROP
-    sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
-    sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
-    sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
-    sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
-    sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
-    sudo iptables -I DOCKER-USER -i lo -j ACCEPT
-'
+sudo tee /usr/local/bin/docker-firewall.sh > /dev/null << 'FWSCRIPT'
+#!/bin/bash
+# Persistent DOCKER-USER rules -- re-applied after Docker starts on each boot.
+# Port 3000 (Dokploy UI) is NOT included here: it is opened temporarily during
+# initial setup and should be closed manually after SSL is configured.
+for cmd in iptables ip6tables; do
+    $cmd -L DOCKER-USER -n &>/dev/null 2>&1 || continue
+    $cmd -F DOCKER-USER
+    $cmd -I DOCKER-USER -j DROP
+    $cmd -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
+    $cmd -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
+    $cmd -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    $cmd -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
+    $cmd -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
+    $cmd -I DOCKER-USER -i lo -j ACCEPT
+done
+FWSCRIPT
+sudo chmod +x /usr/local/bin/docker-firewall.sh
 
-# Same rules for IPv6 (if Docker manages ip6tables)
-if sudo ip6tables -L DOCKER-USER &>/dev/null 2>&1; then
-    run_with_spinner "Configuring DOCKER-USER IPv6 firewall rules" bash -c '
-        sudo ip6tables -I DOCKER-USER -j DROP 2>/dev/null || true
-        sudo ip6tables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
-        sudo ip6tables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
-        sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-        sudo ip6tables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
-        sudo ip6tables -I DOCKER-USER -i lo -j ACCEPT 2>/dev/null || true
-    '
-fi
+sudo tee /etc/systemd/system/docker-firewall.service > /dev/null << 'FWSERVICE'
+[Unit]
+Description=Docker DOCKER-USER firewall rules
+After=docker.service
+Requires=docker.service
+BindsTo=docker.service
 
-run_with_spinner "Saving firewall rules" sudo netfilter-persistent save
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/docker-firewall.sh
+ExecReload=/usr/local/bin/docker-firewall.sh
+
+[Install]
+WantedBy=multi-user.target
+FWSERVICE
+
+sudo systemctl daemon-reload
+sudo systemctl enable docker-firewall
+run_with_spinner "Configuring DOCKER-USER firewall rules" sudo systemctl start docker-firewall
+
+# Port 3000 is temporary (initial setup only) -- added outside the persistent script
+sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
+sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 3000)"
 
 # === STEP 9: INSTALL DOKPLOY ===
@@ -718,10 +739,11 @@ SETUP_PHASE="dokploy"
 run_with_log "Installing Dokploy" bash -c 'timeout 600 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
 
-# Dokploy install script removes UFW and netfilter-persistent (conflicts with Docker iptables).
-# Reinstall and re-apply all rules so the firewall is active again.
-if ! dpkg -l ufw 2>/dev/null | grep -q "^ii" || ! dpkg -l netfilter-persistent 2>/dev/null | grep -q "^ii"; then
-    run_with_spinner "Reinstalling UFW + netfilter-persistent (removed by Dokploy)" sudo apt-get install -y -qq ufw netfilter-persistent iptables-persistent
+# Dokploy install script removes UFW (conflicts with iptables-persistent which Dokploy uses).
+# Reinstall UFW and re-apply rules. netfilter-persistent is NOT reinstalled -- we use the
+# docker-firewall systemd service instead (avoids the ufw/iptables-persistent conflict).
+if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
+    run_with_spinner "Reinstalling UFW (removed by Dokploy)" sudo apt-get install -y -qq ufw
     sudo ufw --force reset > /dev/null
     sudo ufw default deny incoming > /dev/null
     sudo ufw default allow outgoing > /dev/null
@@ -733,21 +755,11 @@ if ! dpkg -l ufw 2>/dev/null | grep -q "^ii" || ! dpkg -l netfilter-persistent 2
     log "UFW reinstalled and reconfigured after Dokploy (port 22 intentionally blocked)"
 fi
 
-# Dokploy install may restart Docker, which flushes iptables DOCKER-USER rules -- re-apply if needed
-if ! sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
-    run_with_spinner "Re-applying DOCKER-USER firewall rules (Docker was restarted)" bash -c '
-        sudo iptables -I DOCKER-USER -j DROP
-        sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
-        sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
-        sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
-        sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-        sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
-        sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
-        sudo iptables -I DOCKER-USER -i lo -j ACCEPT
-    '
-    run_with_spinner "Saving firewall rules" sudo netfilter-persistent save
-    log "DOCKER-USER rules re-applied after Dokploy install"
-fi
+# Re-apply DOCKER-USER rules via the systemd service (Dokploy may have restarted Docker)
+run_with_spinner "Re-applying DOCKER-USER firewall rules" sudo systemctl restart docker-firewall
+# Re-add port 3000 (temporary -- flushed by service restart)
+sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
+sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 
 gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '
 for i in $(seq 1 30); do
@@ -957,8 +969,10 @@ printf "  $(gum style --bold --foreground 6 '2')  Run ./cleanup.sh  -- remove ol
 printf "  $(gum style --bold --foreground 6 '3')  Run ./check.sh    -- verify hardening\n"
 printf "  $(gum style --bold --foreground 6 '4')  Setup Dokploy at http://%s:3000\n" "$PUBLIC_IP"
 printf "  $(gum style --bold --foreground 6 '5')  After SSL, close port 3000:\n"
+printf "       sudo ufw delete allow 3000/tcp\n"
 printf "       sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT\n"
-printf "       sudo netfilter-persistent save\n"
+printf "       sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true\n"
+printf "       (no save needed -- port 3000 is not in the persistent docker-firewall service)\n"
 echo ""
 
 printf '\a'  # Terminal bell -- audible notification that setup is complete
