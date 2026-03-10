@@ -585,9 +585,10 @@ SETUP_PHASE="ssh"
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
 # Ubuntu 24.04 uses ssh.socket by default; switch to ssh.service for reliable port binding
-sudo systemctl disable --now ssh.socket 2>/dev/null || true
+# Start ssh.service first, then disable socket (without --now) to avoid killing the active session
 sudo systemctl enable ssh.service
 sudo systemctl start ssh.service 2>/dev/null || true
+sudo systemctl disable ssh.socket 2>/dev/null || true
 log "SSH socket disabled, using direct service"
 
 # AllowUsers is intentionally omitted here -- added only after the new connection is verified
