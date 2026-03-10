@@ -2,6 +2,7 @@
 # VPS Hardening Script - Simple & Reliable
 # Ubuntu 24.04 LTS + Dokploy
 # https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy
+# Usage: sudo bash setup.sh
 
 set -euo pipefail
 
@@ -21,6 +22,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # === CONFIGURATION ===
+# Capture the invoking user before sudo escalation (needed for cleanup step)
 CURRENT_USER="${SUDO_USER:-$(whoami)}"
 if command -v shuf &>/dev/null; then
     SSH_PORT=$(shuf -i 50000-60000 -n 1)
@@ -87,14 +89,16 @@ progress_bar() {
 run_with_spinner() {
     local label="$1"
     shift
-    sudo -v 2>/dev/null || true
+    sudo -v 2>/dev/null || true  # Refresh sudo token to prevent timeout during long operations
     gum spin --spinner dot --title "$label" -- "$@"
 }
 
 run_with_log() {
+    # Runs a command in the background while streaming its output live.
+    # Uses a tmpfile + tail -f so output appears in real time without blocking.
     local label="$1"
     shift
-    sudo -v 2>/dev/null || true
+    sudo -v 2>/dev/null || true  # Refresh sudo token to prevent timeout during long operations
     printf "  \033[1;34m>> %s\033[0m\n" "$label"
     local tmpfile
     tmpfile=$(mktemp)
@@ -106,7 +110,7 @@ run_with_log() {
     local tail_pid=$!
     wait "$pid"
     local exit_code=$?
-    sleep 0.5
+    sleep 0.5  # Allow tail to flush remaining output before killing it
     kill "$tail_pid" 2>/dev/null || true
     rm -f "$tmpfile"
     return "$exit_code"
@@ -248,6 +252,7 @@ while true; do
 
     printf '%s:%s' "$NEW_USER" "$PASS1" | sudo chpasswd && break
 done
+# Clear sensitive variables from memory
 PASS1=""; PASS2=""
 unset PASS1 PASS2
 log "Password set"
@@ -332,6 +337,7 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         gum confirm --prompt.foreground 6 "I have saved the private key now" || error "Cannot continue without saving the private key"
     }
 
+    # Securely delete private key -- shred overwrites file contents before deleting
     shred -u "$TEMP_KEY_PATH" 2>/dev/null || rm -f "$TEMP_KEY_PATH"
     rm -f "$TEMP_KEY_PATH.pub"
     rmdir "$TEMP_KEY_DIR" 2>/dev/null || true
@@ -355,6 +361,7 @@ else
     sudo chmod 700 "/home/$NEW_USER/.ssh"
     sudo chmod 600 "/home/$NEW_USER/.ssh/authorized_keys"
     sudo chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
+    # Clear sensitive variable from memory
     SSH_KEY=""
     unset SSH_KEY
     log "SSH key configured"
@@ -543,6 +550,7 @@ SETUP_PHASE="ssh"
 
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
+# Ubuntu 24.04 uses ssh.socket by default; switch to ssh.service for reliable port binding
 sudo systemctl disable --now ssh.socket 2>/dev/null || true
 sudo systemctl enable ssh.service
 log "SSH socket disabled, using direct service"
@@ -711,6 +719,7 @@ findtime = 600
 EOF
         sudo systemctl restart fail2ban
 
+        # Order matters: add LIMIT rule first, then remove ALLOW to avoid a gap in coverage
         sudo ufw limit "$SSH_PORT/tcp" > /dev/null
         sudo ufw delete allow "$SSH_PORT/tcp" > /dev/null
 
@@ -816,4 +825,4 @@ echo ""
 printf "  \033[1;32m──────────────────────────────────────────────────\033[0m\n"
 echo ""
 
-printf '\a'
+printf '\a'  # Terminal bell -- audible notification that setup is complete
