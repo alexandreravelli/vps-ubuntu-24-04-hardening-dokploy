@@ -17,15 +17,16 @@ warn() { gum style --foreground 3 "  [!] $1"; }
 error() { gum style --foreground 1 --bold "  [X] $1"; exit 1; }
 
 echo ""
-gum style --border rounded --border-foreground 4 --padding "1 2" --margin "0 2" \
-    "POST-INSTALLATION CLEANUP"
+printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
+printf "  \033[1;34mPOST-INSTALLATION CLEANUP\033[0m\n"
+printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
 echo ""
 
 CURRENT_USER=$(whoami)
 if [ $# -ge 1 ]; then
     TARGET_USER="$1"
 else
-    gum style --foreground 7 "  Common default users: ubuntu, admin, debian"
+    printf "  Common default users: ubuntu, admin, debian\n"
     TARGET_USER=$(gum input --placeholder "Which user to remove?" --prompt "> " --prompt.foreground 6)
 fi
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 # VPS Hardening Script - Simple & Reliable
 # Ubuntu 24.04 LTS + Dokploy
-# https://github.com/alexandreravelli/vps-hardening-script-ubuntu-24.04-LTS
+# https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy
 
 set -euo pipefail
 
@@ -39,15 +39,10 @@ cleanup_on_error() {
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
         echo ""
-        if $HAS_GUM; then
-            gum style --foreground 1 --bold --border rounded --border-foreground 1 --padding "1 2" \
-                "SETUP FAILED during phase: $SETUP_PHASE" \
-                "" \
-                "Check the log: $LOG_FILE"
-        else
-            echo -e "\033[0;31m[ERROR] SETUP FAILED during phase: $SETUP_PHASE\033[0m"
-            echo "Check the log: $LOG_FILE"
-        fi
+        printf "  \033[1;31m──────────────────────────────────────────────\033[0m\n"
+        printf "  \033[1;31m[ERROR] SETUP FAILED during phase: %s\033[0m\n" "$SETUP_PHASE"
+        printf "  Check the log: %s\n" "$LOG_FILE"
+        printf "  \033[1;31m──────────────────────────────────────────────\033[0m\n"
 
         if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ]; then
             echo ""
@@ -85,9 +80,9 @@ progress_bar() {
     local bar
     bar="$(printf '%*s' "$filled" '' | tr ' ' '=')$(printf '%*s' "$empty" '' | tr ' ' ' ')"
     echo ""
-    gum style --foreground 240 "  ----------------------------------------------"
+    printf "  \033[0;90m──────────────────────────────────────────────\033[0m\n"
     echo ""
-    gum style --bold "  [$(gum style --foreground 2 "$bar")] $(gum style --foreground 4 --bold "Step $current/$total") -- $label"
+    printf "  [\033[0;32m%s\033[0m] \033[1;34mStep %s/%s\033[0m -- %s\n" "$bar" "$current" "$total" "$label"
     echo ""
 }
 
@@ -102,13 +97,13 @@ run_with_log() {
     local label="$1"
     shift
     sudo -v 2>/dev/null || true
-    gum style --foreground 4 --bold "  >> $label"
+    printf "  \033[1;34m>> %s\033[0m\n" "$label"
     local tmpfile
     tmpfile=$(mktemp)
     "$@" > "$tmpfile" 2>&1 &
     local pid=$!
     tail -f "$tmpfile" 2>/dev/null | while IFS= read -r line; do
-        gum style --foreground 240 "     $line"
+        printf "  \033[0;90m   %s\033[0m\n" "$line"
     done &
     local tail_pid=$!
     wait "$pid"
@@ -138,23 +133,13 @@ error() {
 
 input_banner() {
     echo ""
-    gum style --background 6 --foreground 0 --bold --padding "0 1" --margin "0 2" " INPUT REQUIRED "
-    gum style --foreground 6 --padding "0 1" --margin "0 2" "$1"
+    printf "  \033[1;36m INPUT REQUIRED \033[0m\n"
+    printf "  \033[0;36m%s\033[0m\n" "$1"
     echo ""
 }
 
 copy_block() {
-    gum style --border double --border-foreground 2 --padding "0 2" --margin "0 2" "$1"
-}
-
-table_row() {
-    local label="$1"
-    local value="$2"
-    local dots_len=$(( 20 - ${#label} ))
-    [ "$dots_len" -lt 2 ] && dots_len=2
-    local dots
-    dots=$(printf '%*s' "$dots_len" '' | tr ' ' '.')
-    printf "  \033[1;37m%s\033[0;90m %s \033[0m%s\n" "$label" "$dots" "$value"
+    printf "\n  \033[1;32m>\033[0m  %s\n\n" "$1"
 }
 
 # === WELCOME SCREEN ===
@@ -173,23 +158,23 @@ gum style \
     "Secure your server in minutes"
 
 echo ""
-gum style --foreground 7 --bold "  This script will:"
+printf "  \033[1mThis script will:\033[0m\n"
 echo ""
-gum style --foreground 7 "  1. Create admin user with sudo and strong password policy"
-gum style --foreground 7 "  2. Configure SSH key (paste or generate ed25519 + passphrase)"
-gum style --foreground 7 "  3. Update system, 2GB swap, Quad9 DNS-over-TLS + DNSSEC"
-gum style --foreground 7 "  4. Harden kernel: anti-spoofing, SYN flood, ASLR, dmesg"
-gum style --foreground 7 "  5. Install UFW, Fail2Ban, auditd, AppArmor, auto-updates"
-gum style --foreground 7 "  6. Firewall: deny-by-default, open 80, 443, 3000, SSH"
-gum style --foreground 7 "  7. Harden SSH: random port 50000-60000, key-only, no root"
-gum style --foreground 7 "  8. Install Docker from official APT repo with GPG"
-gum style --foreground 7 "  9. Install Dokploy (self-hosted PaaS)"
+printf "  1. Create admin user with sudo and strong password policy\n"
+printf "  2. Configure SSH key (paste or generate ed25519 + passphrase)\n"
+printf "  3. Update system, 2GB swap, Quad9 DNS-over-TLS + DNSSEC\n"
+printf "  4. Harden kernel: anti-spoofing, SYN flood, ASLR, dmesg\n"
+printf "  5. Install UFW, Fail2Ban, auditd, AppArmor, auto-updates\n"
+printf "  6. Firewall: deny-by-default, open 80, 443, 3000, SSH\n"
+printf "  7. Harden SSH: random port 50000-60000, key-only, no root\n"
+printf "  8. Install Docker from official APT repo with GPG\n"
+printf "  9. Install Dokploy (self-hosted PaaS)\n"
 echo ""
-gum style --foreground 7 --bold "  Prerequisites:"
+printf "  \033[1mPrerequisites:\033[0m\n"
 echo ""
-gum style --foreground 7 "  - Fresh Ubuntu 24.04 LTS VPS"
-gum style --foreground 7 "  - User with sudo privileges"
-gum style --foreground 7 "  - SSH public key ready (or generate one)"
+printf "  - Fresh Ubuntu 24.04 LTS VPS\n"
+printf "  - User with sudo privileges\n"
+printf "  - SSH public key ready (or generate one)\n"
 echo ""
 
 gum confirm "Ready to start?" || { echo "Setup cancelled."; exit 0; }
@@ -319,23 +304,24 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
     sudo chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
 
     echo ""
-    gum style --border rounded --border-foreground 3 --foreground 3 --padding "1 2" --margin "1 0" \
-        "IMPORTANT: Save your private key NOW" \
-        "" \
-        "This key will be DELETED from the server after this step." \
-        "Select from -----BEGIN to END----- (included) and copy." \
-        "" \
-        "Save to:  ~/.ssh/id_ed25519  (Linux/Mac)" \
-        "          C:\Users\YOU\.ssh\id_ed25519  (Windows)" \
-        "" \
-        "Then run: chmod 600 ~/.ssh/id_ed25519"
+    printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
+    printf "  \033[1;33mIMPORTANT: Save your private key NOW\033[0m\n"
+    printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
+    echo ""
+    printf "  This key will be DELETED from the server after this step.\n"
+    printf "  Select from -----BEGIN to END----- (included) and copy.\n"
+    echo ""
+    printf "  Save to:  ~/.ssh/id_ed25519  (Linux/Mac)\n"
+    printf "            C:\\Users\\YOU\\.ssh\\id_ed25519  (Windows)\n"
+    printf "  Then run: chmod 600 ~/.ssh/id_ed25519\n"
+    echo ""
 
-    gum style --foreground 7 --bold "  Private key:"
+    printf "  \033[1mPrivate key:\033[0m\n"
     echo ""
     cat "$TEMP_KEY_PATH"
     echo ""
 
-    gum style --foreground 7 --bold "  Public key:"
+    printf "  \033[1mPublic key:\033[0m\n"
     echo ""
     cat "$TEMP_KEY_PATH.pub"
     echo ""
@@ -677,28 +663,24 @@ SETUP_PHASE="ssh-test"
 
 PUBLIC_IP=$(curl -s --max-time 10 ifconfig.me || echo "UNKNOWN")
 
-gum style --border rounded --border-foreground 3 --foreground 3 --bold --padding "1 2" --margin "1 0" \
-    "CRITICAL: Test your SSH connection before continuing"
-
+printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
+printf "  \033[1;33mCRITICAL: Test your SSH connection before continuing\033[0m\n"
+printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
 echo ""
-gum style --border rounded --border-foreground 1 --foreground 1 --padding "1 2" --margin "1 0" \
-    "WARNING: If your VPS provider has an external firewall" \
-    "(OVH, Hetzner, AWS, etc.), you MUST open port $SSH_PORT" \
-    "in their control panel BEFORE testing your connection."
-
+printf "  \033[1;31mWARNING:\033[0m If your VPS provider has an external firewall\n"
+printf "  (OVH, Hetzner, AWS, etc.), you MUST open port %s\n" "$SSH_PORT"
+printf "  in their control panel BEFORE testing your connection.\n"
 echo ""
-gum style --foreground 7 "  Open a NEW terminal and run:"
+printf "  Open a NEW terminal and run:\n"
 echo ""
 copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
 
 if gum confirm "Did SSH work on port $SSH_PORT?"; then
     echo ""
-    gum style --border rounded --border-foreground 3 --foreground 3 --padding "1 2" --margin "1 0" \
-        "WARNING: This will permanently close port 22" \
-        "and disable password authentication." \
-        "" \
-        "Make sure you can connect via:" \
-        "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
+    printf "  \033[1;33mWARNING:\033[0m This will permanently close port 22\n"
+    printf "  and disable password authentication.\n"
+    printf "  Make sure you can connect via:\n"
+    copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
 
     CONFIRM_CLOSE=$(gum input --placeholder "Type CONFIRM to proceed, anything else to cancel" --prompt "> " --prompt.foreground 3)
 
@@ -741,12 +723,12 @@ EOF
 else
     warn "SSH test failed -- keeping port 22 and password auth open for safety"
     echo ""
-    gum style --foreground 7 "  Fix the issue, then run these commands manually:"
+    printf "  Fix the issue, then run these commands manually:\n"
     echo ""
-    gum style --foreground 7 "  sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf"
-    gum style --foreground 7 "  sudo sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf"
-    gum style --foreground 7 "  sudo systemctl restart ssh"
-    gum style --foreground 7 "  sudo ufw delete allow 22/tcp"
+    printf "  sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf\n"
+    printf "  sudo sed -i '/^Port 22\$/d' /etc/ssh/sshd_config.d/hardening.conf\n"
+    printf "  sudo systemctl restart ssh\n"
+    printf "  sudo ufw delete allow 22/tcp\n"
 fi
 
 # === OPTIONAL: REMOVE OLD USER ===
@@ -760,16 +742,17 @@ elif ! id "$OLD_USER" &>/dev/null; then
     log "User '$OLD_USER' doesn't exist (already removed)"
 else
     echo ""
-    gum style --border rounded --border-foreground 4 --padding "0 2" --margin "1 0" "Optional: Remove old user '$OLD_USER'"
+    printf "  \033[1mOptional: Remove old user '%s'\033[0m\n" "$OLD_USER"
+    echo ""
 
     if [ "$OLD_USER" = "$(whoami)" ]; then
         warn "Cannot auto-remove '$OLD_USER' -- you're currently logged in as this user"
         echo ""
-        gum style --foreground 7 "  To remove this user safely:"
-        gum style --foreground 7 "  1. Disconnect from this session"
-        gum style --foreground 7 "  2. Login as '$NEW_USER':"
+        printf "  To remove this user safely:\n"
+        printf "  1. Disconnect from this session\n"
+        printf "  2. Login as '%s':\n" "$NEW_USER"
         copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
-        gum style --foreground 7 "  3. Run: sudo deluser --remove-home $OLD_USER"
+        printf "  3. Run: sudo deluser --remove-home %s\n" "$OLD_USER"
     else
         if gum confirm "Remove user '$OLD_USER'?"; then
             sudo pkill -9 -u "$OLD_USER" 2>/dev/null || true
@@ -781,7 +764,7 @@ else
                 log "User '$OLD_USER' removed"
             else
                 warn "Could not remove '$OLD_USER' automatically"
-                gum style --foreground 7 "  Try manually: sudo userdel -r -f $OLD_USER"
+                printf "  Try manually: sudo userdel -r -f %s\n" "$OLD_USER"
             fi
 
             if ! id "$OLD_USER" &>/dev/null; then
@@ -791,7 +774,7 @@ else
             fi
         else
             warn "User '$OLD_USER' NOT removed"
-            gum style --foreground 7 "  Remove later with: sudo deluser --remove-home $OLD_USER"
+            printf "  Remove later with: sudo deluser --remove-home %s\n" "$OLD_USER"
         fi
     fi
 fi

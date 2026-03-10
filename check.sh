@@ -42,15 +42,16 @@ warn_check() {
 
 section() {
     echo ""
-    gum style --bold "  $1"
-    gum style --foreground 240 "  $(printf '%*s' ${#1} '' | tr ' ' '-')"
+    printf "  \033[1m%s\033[0m\n" "$1"
+    printf "  \033[0;90m%s\033[0m\n" "$(printf '%*s' "${#1}" '' | tr ' ' '-')"
 }
 
 # === HEADER ===
 echo ""
-gum style --border rounded --border-foreground 4 --padding "1 2" --margin "0 2" \
-    "VPS HARDENING CHECK  v$VERSION" \
-    "Post-install security audit"
+printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
+printf "  \033[1;34mVPS HARDENING CHECK  v%s\033[0m\n" "$VERSION"
+printf "  \033[0;90mPost-install security audit\033[0m\n"
+printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
 
 # === SSH ===
 section "SSH Configuration"
@@ -349,17 +350,16 @@ fi
 TOTAL=$((PASS_COUNT + FAIL_COUNT + WARN_COUNT))
 
 echo ""
-gum style --border rounded --border-foreground 4 --bold --padding "1 2" --margin "0 2" \
-    "RESULTS" \
-    "" \
-    "PASS: $PASS_COUNT  FAIL: $FAIL_COUNT  WARN: $WARN_COUNT  TOTAL: $TOTAL"
-
+printf "  \033[1m──────────────────────────────────────────────\033[0m\n"
+printf "  PASS: \033[0;32m%s\033[0m  FAIL: \033[0;31m%s\033[0m  WARN: \033[0;33m%s\033[0m  TOTAL: %s\n" \
+    "$PASS_COUNT" "$FAIL_COUNT" "$WARN_COUNT" "$TOTAL"
+printf "  \033[1m──────────────────────────────────────────────\033[0m\n"
 echo ""
 if [ "$FAIL_COUNT" -eq 0 ] && [ "$WARN_COUNT" -eq 0 ]; then
-    gum style --foreground 2 --bold "  Your server is fully hardened."
+    printf "  \033[1;32mYour server is fully hardened.\033[0m\n"
 elif [ "$FAIL_COUNT" -eq 0 ]; then
-    gum style --foreground 3 --bold "  Your server is mostly hardened. Review warnings above."
+    printf "  \033[1;33mYour server is mostly hardened. Review warnings above.\033[0m\n"
 else
-    gum style --foreground 1 --bold "  Your server has security issues. Fix failures above."
+    printf "  \033[1;31mYour server has security issues. Fix failures above.\033[0m\n"
 fi
 echo ""
