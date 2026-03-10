@@ -9,8 +9,8 @@
 
 <p align="center">
   <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
-  One script. 9 steps. Production-ready server.<br><br>
-  <a href="#-requirements">Requirements</a> · <a href="#-quick-start">Quick Start</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-security">Security</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-faq">FAQ</a>
+  One script. 9 steps. Hardened OS + Dokploy PaaS in ~10 minutes.<br><br>
+  <a href="#-requirements">Requirements</a> · <a href="#-quick-start">Quick Start</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-security">Security</a> · <a href="#-ssh-key-options">SSH Keys</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-faq">FAQ</a>
 </p>
 
 <p align="center">
@@ -19,9 +19,9 @@
 
 ---
 
-## Why?
+## 💡 Why?
 
-Most VPS come with a bare OS and no security. Hardening one manually takes hours and is easy to get wrong. This script does it all interactively, with a polished CLI powered by [gum](https://github.com/charmbracelet/gum), and deploys [Dokploy](https://dokploy.com) (self-hosted PaaS) on top.
+Most VPS come with a bare OS and no security. Hardening one manually takes hours and is easy to get wrong. This script does it all interactively, with an interactive CLI built on [gum](https://github.com/charmbracelet/gum) for prompts and spinners, and deploys [Dokploy](https://dokploy.com) (self-hosted PaaS) on top.
 
 ---
 
@@ -29,30 +29,28 @@ Most VPS come with a bare OS and no security. Hardening one manually takes hours
 
 - Fresh **Ubuntu 24.04 LTS** VPS
 - User with **sudo** privileges
-- SSH public key ready (or let the script generate one)
+- SSH public key ready (`ssh-ed25519` or `ssh-rsa`) — or let the script generate one
 
-> **External firewall (OVH, Hetzner, AWS, etc.):** If your VPS provider has a network-level firewall, open the following ports in their control panel **before** running the script:
-> | Port | Protocol | Purpose | When to close |
-> |------|----------|---------|---------------|
-> | 22 | TCP | SSH (default, script will move it) | After confirming new SSH port works |
-> | 80 | TCP | HTTP / SSL certificate validation | Keep open |
-> | 443 | TCP | HTTPS | Keep open |
-> | 3000 | TCP | Dokploy initial setup | After configuring your domain + SSL |
-> | *custom* | TCP | New SSH port (shown at end of script) | Keep open |
->
+> **External firewall (OVH, Hetzner, AWS, etc.):** If your VPS provider has a network-level firewall, open these ports in their control panel **before** running the script:
+
+| Port | Protocol | Purpose | When to close |
+|------|----------|---------|---------------|
+| 22 | TCP | SSH (default, script will move it) | After confirming new SSH port works |
+| 80 | TCP | HTTP / SSL certificate validation | Keep open |
+| 443 | TCP | HTTPS | Keep open |
+| 3000 | TCP | Dokploy initial setup | After configuring your domain + SSL |
+| *custom* | TCP | New SSH port (shown at end of script) | Keep open |
+
 > The exact SSH port is displayed at the end of the script and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
 
 ---
 
 ## 🚀 Quick Start
 
-Connect to your VPS, switch to root, then run:
+Connect to your VPS and run:
 
 ```bash
-sudo -i
-```
-
-```bash
+sudo -i  # switch to root (required)
 curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
@@ -62,7 +60,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 
 ## ⚙️ What It Does
 
-**9 interactive steps** · **~10 minutes** · visual progress bar
+**9 interactive steps** · **~10 minutes**
 
 ```
 [========            ] Step 4/9 -- Kernel hardening
@@ -80,7 +78,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 8 | **Docker** | Official APT repo + GPG + Docker Swarm + DOCKER-USER firewall | ~2-3min |
 | 9 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~1-2min |
 
-> After step 9, the script asks you to **test your SSH connection** on the new port. Only after your confirmation (typing `CONFIRM`) will it close port 22 and disable password auth.
+> ⚠️ **After step 9**, the script asks you to test your SSH connection on the new port. Only after typing `CONFIRM` will it close port 22 and disable password auth.
 
 ---
 
@@ -89,7 +87,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 The script covers **5 security layers** plus built-in safety mechanisms. No manual configuration required.
 
 <details>
-<summary><strong>SSH hardening</strong></summary>
+<summary><strong>🔐 SSH hardening</strong></summary>
 
 | Feature | Details |
 |---------|---------|
@@ -97,14 +95,14 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Root login disabled | `PermitRootLogin no` |
 | Key-only auth | Password auth disabled after confirmation |
 | Brute-force protection | MaxAuthTries 3, LoginGraceTime 30s |
-| Session control | ClientAliveInterval 300s, CountMax 2 |
+| Session control | ClientAliveInterval 300s, ClientAliveCountMax 2 |
 | User whitelist | `AllowUsers` restricts to admin only |
 | Forwarding disabled | X11 + TCP forwarding off |
 
 </details>
 
 <details>
-<summary><strong>Network and firewall</strong></summary>
+<summary><strong>🌐 Network and firewall</strong></summary>
 
 | Feature | Details |
 |---------|---------|
@@ -117,7 +115,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 </details>
 
 <details>
-<summary><strong>Kernel hardening</strong></summary>
+<summary><strong>🧠 Kernel hardening</strong></summary>
 
 | Feature | Details |
 |---------|---------|
@@ -130,7 +128,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 </details>
 
 <details>
-<summary><strong>Authentication and monitoring</strong></summary>
+<summary><strong>👤 Authentication and monitoring</strong></summary>
 
 | Feature | Details |
 |---------|---------|
@@ -142,7 +140,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 </details>
 
 <details>
-<summary><strong>Docker</strong></summary>
+<summary><strong>🐳 Docker</strong></summary>
 
 | Feature | Details |
 |---------|---------|
@@ -153,7 +151,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 </details>
 
 <details>
-<summary><strong>Recovery and safety</strong></summary>
+<summary><strong>🛡️ Recovery and safety</strong></summary>
 
 | Feature | Details |
 |---------|---------|
@@ -174,7 +172,7 @@ At step 2, you choose:
 
 | Option | What happens |
 |--------|-------------|
-| **Paste existing key** | You paste your `ssh-ed25519` or `ssh-rsa` public key |
+| **Paste existing key** | You paste your `ssh-ed25519` (recommended) or `ssh-rsa` (legacy) public key |
 | **Generate new pair** | Script creates an ed25519 pair, displays the private key for you to save, installs the public key, then **securely deletes** the private key with `shred` |
 
 > When generating a new key pair, the script asks if you want to **protect it with a passphrase**. Even if someone gets your private key file, they can't use it without the passphrase.
@@ -183,24 +181,23 @@ At step 2, you choose:
 
 ## 📋 After Installation
 
-**Connect to your server:**
+### Connect to your server
 
 ```bash
-ssh your-user@your-ip -p NEW_PORT
+ssh your-user@your-ip -p <SSH_PORT>
+# Full command is saved in ~/.vps_setup_summary
 ```
 
-> Your SSH port and full connection command are saved in `~/.vps_setup_summary`. If using an external firewall, verify the new port is open there before closing port 22.
+### Remove default user
 
-**Remove default user:**
-
-> Both scripts are automatically downloaded to your home directory during setup.
+> `cleanup.sh` and `check.sh` are automatically downloaded to your home directory during setup.
 
 ```bash
 sudo ./cleanup.sh          # interactive
 sudo ./cleanup.sh ubuntu   # direct
 ```
 
-**Run security audit:**
+### Run security audit
 
 ```bash
 sudo ./check.sh
@@ -214,7 +211,7 @@ sudo ./check.sh
   PASS: 28  FAIL: 0  WARN: 1  TOTAL: 29
 ```
 
-**Secure Dokploy:**
+### Secure Dokploy
 
 1. Create your admin account at `http://your-ip:3000`
 2. **Enable MFA** on your Dokploy account (Settings > Security)
@@ -222,15 +219,16 @@ sudo ./check.sh
 4. Close port 3000 (only needed for initial setup):
 
 ```bash
+# Remove the Dokploy port from Docker's firewall chain
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
 sudo netfilter-persistent save
 ```
 
 > If using an external firewall, also close port 3000 in your provider's control panel.
 
-**Best Practices:**
+### Best Practices
 
-- **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) -- prevents containers from different projects from communicating with each other.
+- **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) — prevents containers across projects from communicating with each other.
 
 ---
 
@@ -239,16 +237,9 @@ sudo netfilter-persistent save
 ```
 .
 ├── setup.sh        # Main hardening script (interactive CLI)
-├── cleanup.sh      # Remove old default user
+├── cleanup.sh      # Remove the default user
 ├── check.sh        # Post-install security audit
-├── LICENSE         # MIT
-└── .github/
-    ├── workflows/
-    │   └── shellcheck.yml
-    ├── ISSUE_TEMPLATE/
-    │   ├── bug_report.md
-    │   └── feature_request.md
-    └── PULL_REQUEST_TEMPLATE.md
+└── LICENSE
 ```
 
 ---
@@ -270,9 +261,15 @@ sudo systemctl restart ssh
 <details>
 <summary><strong>What if I forget my SSH port?</strong></summary>
 
-Saved in two places -- access via your provider's console:
+Saved in two places — access via your provider's console:
 - `/root/.vps_hardening_config`
 - `~/.vps_setup_summary`
+</details>
+
+<details>
+<summary><strong>What if the script fails mid-way?</strong></summary>
+
+The error trap automatically restores SSH access on port 22. Check `/var/log/vps_setup.log` for details, then re-run on a fresh server.
 </details>
 
 <details>
@@ -290,7 +287,7 @@ Yes. Comment out step 9 in `setup.sh` and remove port 3000 from the firewall rul
 <details>
 <summary><strong>Does it work on other Ubuntu versions?</strong></summary>
 
-Designed and tested for Ubuntu 24.04 LTS. May work on 22.04 but not guaranteed.
+Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH service management).
 </details>
 
 ---
@@ -299,15 +296,16 @@ Designed and tested for Ubuntu 24.04 LTS. May work on 22.04 but not guaranteed.
 
 1. Fork the repo
 2. Create a feature branch
-3. Make sure `shellcheck -S warning your_script.sh` passes
-4. Open a PR using the provided template
+3. Make sure `shellcheck -S warning setup.sh cleanup.sh check.sh` passes
+4. Use conventional commit messages (`feat:`, `fix:`, `docs:`)
+5. Open a PR using the provided template
 
 ---
 
 ## 📄 License
 
-MIT -- see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE)
 
 <p align="center">
-  <sub>Built with <a href="https://github.com/charmbracelet/gum">gum</a> by Charmbracelet</sub>
+  <sub>Built with <a href="https://github.com/charmbracelet/gum">gum</a> (Charmbracelet) · Tested on Ubuntu 24.04 LTS</sub>
 </p>
