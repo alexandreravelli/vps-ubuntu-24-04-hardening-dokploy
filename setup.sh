@@ -816,43 +816,23 @@ ELAPSED=$(( SECONDS - START_TIME ))
 ELAPSED_MIN=$(( ELAPSED / 60 ))
 ELAPSED_SEC=$(( ELAPSED % 60 ))
 
-gum style \
-    --border double \
-    --border-foreground 2 \
-    --padding "1 4" \
-    --margin "1 0" \
-    --bold \
-    --align center \
-    "SERVER READY" \
-    "" \
-    "Completed in ${ELAPSED_MIN}m ${ELAPSED_SEC}s"
-
+printf "  \033[1;32m──────────────────────────────────────────────────\033[0m\n"
+printf "  \033[1;32mSERVER READY\033[0m  \033[0;90m(%dm %ds)\033[0m\n" "$ELAPSED_MIN" "$ELAPSED_SEC"
+printf "  \033[1;32m──────────────────────────────────────────────────\033[0m\n"
 echo ""
-table_row "SSH" "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
-table_row "Dokploy" "http://$PUBLIC_IP:3000"
-table_row "SSH Port" "$SSH_PORT"
-table_row "Firewall" "80, 443, 3000, $SSH_PORT"
-table_row "Fail2Ban" "Active (3 retries, 1h ban)"
-table_row "Auto-updates" "Enabled"
-table_row "Kernel" "Hardened (sysctl)"
-table_row "AppArmor" "Active"
-table_row "DNS" "Quad9 + DNS-over-TLS"
-table_row "Log" "$LOG_FILE"
-table_row "Config" "/home/$NEW_USER/.vps_setup_summary"
+printf "  \033[1mSSH\033[0m      ssh %s@%s -p %s\n" "$NEW_USER" "$PUBLIC_IP" "$SSH_PORT"
+printf "  \033[1mDokploy\033[0m  http://%s:3000\n" "$PUBLIC_IP"
+printf "  \033[1mLog\033[0m      %s\n" "$LOG_FILE"
 echo ""
-
-gum style --foreground 7 --bold "  Quick connect:"
-copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
-
-gum style --foreground 7 --bold "  Next steps:"
+printf "  \033[1mNext steps:\033[0m\n"
+printf "  1. Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
+printf "  2. Run ./cleanup.sh  -- remove old default user\n"
+printf "  3. Run ./check.sh   -- verify hardening\n"
+printf "  4. Setup Dokploy at http://%s:3000\n" "$PUBLIC_IP"
+printf "  5. After SSL, close port 3000:\n"
+printf "     sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT && sudo netfilter-persistent save\n"
 echo ""
-gum style --foreground 7 "  1. Reconnect as $NEW_USER"
-gum style --foreground 7 "  2. Run ./cleanup.sh to remove old default user"
-gum style --foreground 7 "  3. Run ./check.sh to verify hardening status"
-gum style --foreground 7 "  4. Access Dokploy and create admin account"
-gum style --foreground 7 "  5. Configure your domain + SSL in Dokploy"
-gum style --foreground 7 "  6. After SSL, close port 3000:"
+printf "  \033[1;32m──────────────────────────────────────────────────\033[0m\n"
 echo ""
-copy_block "sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT && sudo netfilter-persistent save"
 
 printf '\a'
