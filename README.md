@@ -297,8 +297,7 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 1. Fork the repo
 2. Create a feature branch
 3. Make sure `shellcheck -S warning setup.sh cleanup.sh check.sh` passes
-4. Use conventional commit messages (`feat:`, `fix:`, `docs:`)
-5. Open a PR using the provided template
+4. Open a PR using the provided template
 
 ---
 
