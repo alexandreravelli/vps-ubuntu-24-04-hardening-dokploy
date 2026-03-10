@@ -38,7 +38,9 @@ Most VPS come with a bare OS and no security. Hardening one manually takes hours
 > | 80 | TCP | HTTP / SSL certificate validation | Keep open |
 > | 443 | TCP | HTTPS | Keep open |
 > | 3000 | TCP | Dokploy initial setup | After configuring your domain + SSL |
-> | 50000-60000 | TCP | New SSH port (random, assigned by script) | Keep open |
+> | *custom* | TCP | New SSH port (shown at end of script) | Keep open |
+>
+> The exact SSH port is displayed at the end of the script and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
 
 ---
 
@@ -187,9 +189,7 @@ At step 2, you choose:
 ssh your-user@your-ip -p NEW_PORT
 ```
 
-> **Important:** If your VPS provider has an external firewall (OVH, Hetzner, AWS, etc.), you must **open the new SSH port** in their control panel. The script assigns a random port between 50000-60000 -- make sure it's allowed before closing port 22.
-
-> Your SSH port and full connection command are saved in `~/.vps_setup_summary`.
+> Your SSH port and full connection command are saved in `~/.vps_setup_summary`. If using an external firewall, verify the new port is open there before closing port 22.
 
 **Remove default user:**
 
@@ -226,6 +226,8 @@ sudo ./check.sh
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
 sudo netfilter-persistent save
 ```
+
+> If using an external firewall, also close port 3000 in your provider's control panel.
 
 ---
 
@@ -279,7 +281,7 @@ The script is designed for fresh installs. Use `check.sh` to verify your server'
 <details>
 <summary><strong>Can I skip Dokploy?</strong></summary>
 
-Not currently. Comment out step 9 in `setup.sh` and remove port 3000 from the firewall rules.
+Yes. Comment out step 9 in `setup.sh` and remove port 3000 from the firewall rules.
 </details>
 
 <details>
