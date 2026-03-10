@@ -63,7 +63,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 
 ## ⚙️ What It Does
 
-**9 interactive steps** · **~10 minutes**
+**9 interactive steps** · **~10 minutes** · All prompts handled via CLI — no config files to edit
 
 ```
 [========            ] Step 4/9 -- Kernel hardening

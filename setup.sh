@@ -739,10 +739,10 @@ log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 30
 
 # === STEP 9: INSTALL DOKPLOY ===
 CURRENT_STEP=9
-progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~1-2 min)"
+progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~2-5 min)"
 SETUP_PHASE="dokploy"
 
-run_with_log "Installing Dokploy" bash -c 'timeout 600 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
+run_with_log "Installing Dokploy" bash -c 'timeout 900 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
 
 # Dokploy install script removes UFW (conflicts with iptables-persistent which Dokploy uses).
