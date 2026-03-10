@@ -10,7 +10,7 @@
 <p align="center">
   <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
   One script. 9 steps. Production-ready server.<br><br>
-  <a href="#-quick-start">Quick Start</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-security">Security</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-faq">FAQ</a>
+  <a href="#-requirements">Requirements</a> · <a href="#-quick-start">Quick Start</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-security">Security</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-faq">FAQ</a>
 </p>
 
 <p align="center">
@@ -19,9 +19,17 @@
 
 ---
 
-### Why?
+## Why?
 
 Most VPS come with a bare OS and no security. Hardening one manually takes hours and is easy to get wrong. This script does it all interactively, with a polished CLI powered by [gum](https://github.com/charmbracelet/gum), and deploys [Dokploy](https://dokploy.com) (self-hosted PaaS) on top.
+
+---
+
+## 📝 Requirements
+
+- Fresh **Ubuntu 24.04 LTS** VPS
+- User with **sudo** privileges
+- SSH public key ready (or let the script generate one)
 
 ---
 
@@ -58,7 +66,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades | ~1-2min |
 | 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 + 3000 | ~5s |
 | 7 | **SSH** | Random port 50000-60000, key-only auth, no root login | ~5s |
-| 8 | **Docker** | Official APT repo + GPG + DOCKER-USER firewall (deny-by-default) | ~2-3min |
+| 8 | **Docker** | Official APT repo + GPG + Docker Swarm + DOCKER-USER firewall | ~2-3min |
 | 9 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~1-2min |
 
 > After step 9, the script asks you to **test your SSH connection** on the new port. Only after your confirmation (typing `CONFIRM`) will it close port 22 and disable password auth.
@@ -128,6 +136,7 @@ The script hardens **6 layers** of your server. Everything is automatic.
 | Feature | Details |
 |---------|---------|
 | Official install | APT repo with GPG, not `curl \| sh` |
+| Docker Swarm | Initialized automatically (required for Traefik/Dokploy) |
 | Log rotation | 10MB max, 3 files |
 
 </details>
@@ -215,10 +224,10 @@ sudo netfilter-persistent save
 
 ```
 .
-├── setup.sh        # Main hardening script (interactive, gum UI)
+├── setup.sh        # Main hardening script (interactive CLI)
 ├── cleanup.sh      # Remove old default user
 ├── check.sh        # Post-install security audit
-├── LICENSE          # MIT
+├── LICENSE         # MIT
 └── .github/
     ├── workflows/
     │   └── shellcheck.yml
@@ -227,14 +236,6 @@ sudo netfilter-persistent save
     │   └── feature_request.md
     └── PULL_REQUEST_TEMPLATE.md
 ```
-
----
-
-## 📝 Requirements
-
-- Fresh **Ubuntu 24.04 LTS** VPS
-- User with **sudo** privileges
-- SSH public key ready (or let the script generate one)
 
 ---
 
