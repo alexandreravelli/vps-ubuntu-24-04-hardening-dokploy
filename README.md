@@ -78,7 +78,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades | ~1-2min |
 | 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 + 3000 | ~5s |
 | 7 | **SSH** | Random port 50000-60000, key-only auth, no root login | ~5s |
-| 8 | **Docker** | Official APT repo + GPG + Docker Swarm + DOCKER-USER firewall | ~2-3min |
+| 8 | **Docker** | Official APT repo + GPG + Docker Swarm + `docker-firewall.service` (DOCKER-USER deny-by-default, persisted across Docker restarts) | ~2-3min |
 | 9 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~1-2min |
 
 > ⚠️ **After step 9**, the script asks you to test your SSH connection on the new port. Only after typing `CONFIRM` will it close port 22 and disable password auth.

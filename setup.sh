@@ -178,7 +178,7 @@ printf "  $(gum style --bold --foreground 6 '4')  Kernel hardening: anti-spoofin
 printf "  $(gum style --bold --foreground 6 '5')  Install UFW · Fail2Ban · AppArmor · auditd\n"
 printf "  $(gum style --bold --foreground 6 '6')  Firewall: deny-by-default, allow 80/443/3000\n"
 printf "  $(gum style --bold --foreground 6 '7')  SSH: random port 50000-60000, key-only auth\n"
-printf "  $(gum style --bold --foreground 6 '8')  Docker: official APT repo + GPG + Swarm\n"
+printf "  $(gum style --bold --foreground 6 '8')  Docker: official APT repo + GPG + Swarm + DOCKER-USER firewall\n"
 printf "  $(gum style --bold --foreground 6 '9')  Dokploy: self-hosted PaaS at port 3000\n"
 echo ""
 
