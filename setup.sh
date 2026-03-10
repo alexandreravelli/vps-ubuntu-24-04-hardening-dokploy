@@ -49,11 +49,16 @@ cleanup_on_error() {
             echo ""
             printf "  \033[1;33m[!] Restoring SSH access on port 22 as a safety measure...\033[0m\n"
             sudo ufw allow 22/tcp 2>/dev/null || true
-            if [ -f /etc/ssh/sshd_config.bak ]; then
-                sudo cp /etc/ssh/sshd_config.bak /etc/ssh/sshd_config 2>/dev/null || true
-                sudo systemctl restart ssh 2>/dev/null || true
+            # Remove hardening config drop-in so ssh.socket continues serving port 22 unchanged.
+            # Do NOT restart or reload ssh -- ssh.socket is still running and the current session
+            # is still alive. Touching the socket would kill all active connections.
+            sudo rm -f /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null || true
+            # Kill standalone sshd if it was started
+            if [ -f /run/sshd-hardened.pid ]; then
+                sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
+                sudo rm -f /run/sshd-hardened.pid 2>/dev/null || true
             fi
-            printf "  \033[1;33m[!] Port 22 restored. You should still have access.\033[0m\n"
+            printf "  \033[1;33m[!] Port 22 still active. Your session should be intact.\033[0m\n"
         fi
     fi
 }
@@ -590,8 +595,15 @@ sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 # The socket stays alive for the current session; the standalone sshd opens the new port.
 # ssh.socket is only disabled for next boot; ssh.service takes over after reboot.
 
+# Clean up any leftover pid from a previous failed run
+if [ -f /run/sshd-hardened.pid ]; then
+    sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
+    sudo rm -f /run/sshd-hardened.pid
+fi
+
 # AllowUsers is intentionally omitted here -- added only after the new connection is verified
 # so the current user can still reconnect on port 22 if something goes wrong before CONFIRM
+sudo mkdir -p /etc/ssh/sshd_config.d
 sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port 22
 Port $SSH_PORT
@@ -607,17 +619,17 @@ ClientAliveCountMax 2
 EOF
 
 # Validate config
-sudo sshd -t || error "SSH config validation failed -- not applying"
+sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
 
 # Start a standalone sshd ONLY on $SSH_PORT
 # -p overrides all Port directives so it only binds to $SSH_PORT, not port 22
 # This does not affect ssh.socket or the current session in any way
-sudo sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
+sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
 
 # Prepare for next reboot: ssh.socket off, ssh.service on
 # (takes effect after reboot -- we do NOT stop the socket now)
 sudo systemctl disable ssh.socket 2>/dev/null || true
-sudo systemctl enable ssh.service
+sudo systemctl enable ssh.service 2>/dev/null || true
 
 log "SSH hardened (port 22 via socket, port $SSH_PORT via standalone sshd)"
 
@@ -790,12 +802,12 @@ ClientAliveCountMax 2
 AllowUsers $NEW_USER
 EOF
         # Validate config
-        sudo sshd -t || error "SSH config validation failed -- not applying"
+        sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
         # Restart standalone sshd with new config (no password auth, AllowUsers applied)
         # Port 22 session is unaffected -- we never touch ssh.socket
         sudo kill "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
         sleep 1
-        sudo sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
+        sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
         # Block port 22 at firewall level -- ssh.socket keeps running but nothing can reach it
         # It will stop permanently on next reboot (disabled in step 7)
         sudo ufw delete allow 22/tcp
