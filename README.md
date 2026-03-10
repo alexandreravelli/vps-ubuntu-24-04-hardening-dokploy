@@ -86,7 +86,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 
 ## 🔒 Security
 
-The script hardens **6 layers** of your server. Everything is automatic.
+The script covers **5 security layers** plus built-in safety mechanisms. No manual configuration required.
 
 <details>
 <summary><strong>SSH hardening</strong></summary>
