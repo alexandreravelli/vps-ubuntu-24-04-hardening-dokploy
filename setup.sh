@@ -607,6 +607,8 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 EOF
 
+# Validate config before reload -- prevents applying a broken config that could lock out SSH
+sudo sshd -t || error "SSH config validation failed -- not applying"
 # Use reload (SIGHUP) instead of restart -- applies new config without dropping active SSH sessions
 sudo systemctl reload ssh
 log "SSH hardened (ports: 22 + $SSH_PORT, password auth still enabled)"
@@ -643,7 +645,8 @@ log "Docker log rotation configured"
 
 # Initialize Docker Swarm (required for Dokploy/Traefik)
 if ! sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
-    SWARM_ADDR=$(curl -s --max-time 10 ifconfig.me 2>/dev/null || hostname -I | awk '{print $1}')
+    # Filter out docker/loopback IPs from fallback to get the real public-facing interface
+    SWARM_ADDR=$(curl -s --max-time 10 ifconfig.me 2>/dev/null || hostname -I | tr ' ' '\n' | grep -vE '^(127\.|172\.|10\.)' | head -1)
     run_with_spinner "Initializing Docker Swarm" sudo docker swarm init --advertise-addr "$SWARM_ADDR"
     log "Docker Swarm initialized (required for Traefik)"
 else
@@ -684,8 +687,24 @@ CURRENT_STEP=9
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~1-2 min)"
 SETUP_PHASE="dokploy"
 
-run_with_log "Installing Dokploy" bash -c 'timeout 300 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
+run_with_log "Installing Dokploy" bash -c 'timeout 600 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
+
+# Dokploy install may restart Docker, which flushes iptables DOCKER-USER rules -- re-apply if needed
+if ! sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
+    run_with_spinner "Re-applying DOCKER-USER firewall rules (Docker was restarted)" bash -c '
+        sudo iptables -I DOCKER-USER -j DROP
+        sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
+        sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
+        sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
+        sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+        sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
+        sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
+        sudo iptables -I DOCKER-USER -i lo -j ACCEPT
+    '
+    run_with_spinner "Saving firewall rules" sudo netfilter-persistent save
+    log "DOCKER-USER rules re-applied after Dokploy install"
+fi
 
 gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '
 for i in $(seq 1 30); do
@@ -752,6 +771,8 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 AllowUsers $NEW_USER
 EOF
+        # Validate config before reload -- prevents applying a broken config that could lock out SSH
+        sudo sshd -t || error "SSH config validation failed -- not applying"
         # Use reload instead of restart -- script session stays alive to finish the remaining steps
         sudo systemctl reload ssh
         sudo ufw delete allow 22/tcp
@@ -783,7 +804,7 @@ else
     echo ""
     printf "  sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf\n"
     printf "  sudo sed -i '/^Port 22\$/d' /etc/ssh/sshd_config.d/hardening.conf\n"
-    printf "  sudo systemctl restart ssh\n"
+    printf "  sudo systemctl reload ssh\n"
     printf "  sudo ufw delete allow 22/tcp\n"
 fi
 
