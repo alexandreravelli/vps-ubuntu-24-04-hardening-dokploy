@@ -164,7 +164,7 @@ printf "  \033[1mThis script will:\033[0m\n"
 echo ""
 printf "  1. Create admin user with sudo and strong password policy\n"
 printf "  2. Configure SSH key (paste or generate ed25519 + passphrase)\n"
-printf "  3. Update system, 2GB swap, Quad9 DNS-over-TLS + DNSSEC\n"
+printf "  3. Update system, auto-sized swap, Quad9 DNS-over-TLS + DNSSEC\n"
 printf "  4. Harden kernel: anti-spoofing, SYN flood, ASLR, dmesg\n"
 printf "  5. Install UFW, Fail2Ban, auditd, AppArmor, auto-updates\n"
 printf "  6. Firewall: deny-by-default, open 80, 443, 3000, SSH\n"
@@ -380,13 +380,28 @@ sudo timedatectl set-timezone UTC
 log "Timezone set to UTC"
 
 if [ ! -f /swapfile ]; then
-    run_with_spinner "Creating 2GB swap file" bash -c 'sudo fallocate -l 2G /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none && sudo chmod 600 /swapfile && sudo mkswap /swapfile > /dev/null && sudo swapon /swapfile'
-    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
-    if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
-        echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf > /dev/null
-        sudo sysctl -p > /dev/null
+    # Scale swap to RAM: ≤4GB → 2GB swap, 4-16GB → 4GB swap, >16GB → skip (enough RAM for Docker/PaaS)
+    TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$TOTAL_MEM_MB" -le 4096 ]; then
+        SWAP_SIZE_MB=2048
+    elif [ "$TOTAL_MEM_MB" -le 16384 ]; then
+        SWAP_SIZE_MB=4096
+    else
+        SWAP_SIZE_MB=0
     fi
-    log "Swap configured (2GB, swappiness=10)"
+
+    if [ "$SWAP_SIZE_MB" -gt 0 ]; then
+        SWAP_LABEL="$(( SWAP_SIZE_MB / 1024 ))GB"
+        run_with_spinner "Creating ${SWAP_LABEL} swap file" bash -c "sudo fallocate -l ${SWAP_SIZE_MB}M /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=${SWAP_SIZE_MB} status=none && sudo chmod 600 /swapfile && sudo mkswap /swapfile > /dev/null && sudo swapon /swapfile"
+        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
+        if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
+            echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf > /dev/null
+            sudo sysctl -p > /dev/null
+        fi
+        log "Swap configured (${SWAP_LABEL}, swappiness=10)"
+    else
+        log "Swap skipped ($(( TOTAL_MEM_MB / 1024 ))GB RAM detected -- not needed)"
+    fi
 else
     log "Swap already exists"
 fi
