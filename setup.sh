@@ -147,38 +147,57 @@ copy_block() {
 # === WELCOME SCREEN ===
 clear 2>/dev/null || true
 
+# Title box
 gum style \
     --border double \
     --border-foreground 4 \
-    --padding "1 4" \
-    --margin "1 0" \
+    --padding "1 6" \
+    --margin "1 2" \
     --bold \
     --align center \
     "VPS HARDENING SCRIPT" \
     "" \
     "Ubuntu 24.04 LTS + Dokploy" \
-    "Secure your server in minutes"
+    "~10 min  ·  9 steps"
 
 echo ""
-printf "  \033[1mThis script will:\033[0m\n"
+
+# Steps section
+gum style --bold --foreground 6 "  WHAT IT DOES"
+gum style --foreground 240 "  ────────────────────────────────────────────────"
 echo ""
-printf "  1. Create admin user with sudo and strong password policy\n"
-printf "  2. Configure SSH key (paste or generate ed25519 + passphrase)\n"
-printf "  3. Update system, auto-sized swap, Quad9 DNS-over-TLS + DNSSEC\n"
-printf "  4. Harden kernel: anti-spoofing, SYN flood, ASLR, dmesg\n"
-printf "  5. Install UFW, Fail2Ban, auditd, AppArmor, auto-updates\n"
-printf "  6. Firewall: deny-by-default, open 80, 443, 3000, SSH\n"
-printf "  7. Harden SSH: random port 50000-60000, key-only, no root\n"
-printf "  8. Install Docker from official APT repo with GPG\n"
-printf "  9. Install Dokploy (self-hosted PaaS)\n"
+printf "  $(gum style --bold --foreground 6 '1')  Create admin user + strong password policy\n"
+printf "  $(gum style --bold --foreground 6 '2')  Configure SSH key (ed25519 + passphrase)\n"
+printf "  $(gum style --bold --foreground 6 '3')  Update system, auto-sized swap, DNS-over-TLS\n"
+printf "  $(gum style --bold --foreground 6 '4')  Kernel hardening: anti-spoofing, ASLR, SYN\n"
+printf "  $(gum style --bold --foreground 6 '5')  Install UFW · Fail2Ban · AppArmor · auditd\n"
+printf "  $(gum style --bold --foreground 6 '6')  Firewall: deny-by-default, allow 80/443/3000\n"
+printf "  $(gum style --bold --foreground 6 '7')  SSH: random port 50000-60000, key-only auth\n"
+printf "  $(gum style --bold --foreground 6 '8')  Docker: official APT repo + GPG + Swarm\n"
+printf "  $(gum style --bold --foreground 6 '9')  Dokploy: self-hosted PaaS at port 3000\n"
 echo ""
-printf "  \033[1mPrerequisites:\033[0m\n"
+
+# Prerequisites section
+gum style --bold --foreground 2 "  PREREQUISITES"
+gum style --foreground 240 "  ────────────────────────────────────────────────"
 echo ""
-printf "  - Fresh Ubuntu 24.04 LTS VPS\n"
-printf "  - User with sudo privileges\n"
-printf "  - SSH public key ready (ssh-ed25519 recommended) -- or generate one\n"
-printf "  - External firewall (OVH, Hetzner, AWS...): open ports 22, 80, 443, 3000\n"
-printf "    before running -- the script will show you the final SSH port at the end\n"
+printf "  $(gum style --foreground 2 '✓')  Fresh Ubuntu 24.04 LTS VPS\n"
+printf "  $(gum style --foreground 2 '✓')  User with sudo privileges\n"
+printf "  $(gum style --foreground 2 '✓')  SSH public key (ed25519) -- or generate one\n"
+echo ""
+
+# Firewall warning box
+gum style \
+    --border rounded \
+    --border-foreground 3 \
+    --foreground 3 \
+    --padding "0 2" \
+    --margin "0 2" \
+    "⚠  EXTERNAL FIREWALL (OVH, Hetzner, AWS...)" \
+    "Open these ports BEFORE running the script:" \
+    "22 (SSH)  ·  80 (HTTP)  ·  443 (HTTPS)  ·  3000 (Dokploy)" \
+    "The final custom SSH port will be shown at the end."
+
 echo ""
 
 gum confirm "Ready to start?" || { echo "Setup cancelled."; exit 0; }
