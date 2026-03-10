@@ -218,9 +218,8 @@ sudo ./check.sh
 
 1. Create your admin account at `http://your-ip:3000`
 2. **Enable MFA** on your Dokploy account (Settings > Security)
-3. **Enable Isolated Deployment** on each project (prevents containers from communicating across projects)
-4. Configure your domain + SSL in Dokploy
-5. Close port 3000 (only needed for initial setup):
+3. Configure your domain + SSL in Dokploy
+4. Close port 3000 (only needed for initial setup):
 
 ```bash
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
@@ -228,6 +227,10 @@ sudo netfilter-persistent save
 ```
 
 > If using an external firewall, also close port 3000 in your provider's control panel.
+
+**Best Practices:**
+
+- **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) -- prevents containers from different projects from communicating with each other.
 
 ---
 
