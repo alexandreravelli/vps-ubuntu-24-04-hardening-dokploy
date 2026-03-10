@@ -584,12 +584,18 @@ SETUP_PHASE="ssh"
 
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
-# Ubuntu 24.04 uses ssh.socket by default; switch to ssh.service for reliable port binding
-# Start ssh.service first, then disable socket (without --now) to avoid killing the active session
+# Ubuntu 24.04 uses ssh.socket by default; must switch to ssh.service for multi-port binding
+# Sequence matters:
+#   1. stop socket FIRST (releases port 22) -- established sessions survive, only listener stops
+#   2. start service (now it can bind to port 22 AND $SSH_PORT)
+#   3. disable socket for future boots
+sudo systemctl stop ssh.socket 2>/dev/null || true
 sudo systemctl enable ssh.service
-sudo systemctl start ssh.service 2>/dev/null || true
+sudo systemctl start ssh.service
 sudo systemctl disable ssh.socket 2>/dev/null || true
-log "SSH socket disabled, using direct service"
+# Verify the service is actually running before applying config
+sudo systemctl is-active ssh.service > /dev/null || error "SSH service failed to start after socket handoff"
+log "SSH socket stopped, using direct service"
 
 # AllowUsers is intentionally omitted here -- added only after the new connection is verified
 # so the current user can still reconnect on port 22 if something goes wrong before CONFIRM
@@ -645,8 +651,8 @@ log "Docker log rotation configured"
 
 # Initialize Docker Swarm (required for Dokploy/Traefik)
 if ! sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
-    # Filter out docker/loopback IPs from fallback to get the real public-facing interface
-    SWARM_ADDR=$(curl -s --max-time 10 ifconfig.me 2>/dev/null || hostname -I | tr ' ' '\n' | grep -vE '^(127\.|172\.|10\.)' | head -1)
+    # Force IPv4, filter out all private ranges from fallback to get the real public-facing interface
+    SWARM_ADDR=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || hostname -I | tr ' ' '\n' | grep -vE '^(127\.|172\.|10\.|192\.168\.)' | head -1)
     run_with_spinner "Initializing Docker Swarm" sudo docker swarm init --advertise-addr "$SWARM_ADDR"
     log "Docker Swarm initialized (required for Traefik)"
 else
@@ -718,9 +724,12 @@ exit 1
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
 USER_HOME=$(eval echo "~$NEW_USER")
 for script in cleanup.sh check.sh; do
-    curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script"
-    chmod +x "$USER_HOME/$script"
-    chown "$NEW_USER:$NEW_USER" "$USER_HOME/$script"
+    if curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script" 2>/dev/null; then
+        chmod +x "$USER_HOME/$script"
+        chown "$NEW_USER:$NEW_USER" "$USER_HOME/$script"
+    else
+        warn "Could not download $script -- download manually after setup"
+    fi
 done
 log "Post-install scripts downloaded (cleanup.sh, check.sh)"
 
