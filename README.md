@@ -110,7 +110,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Feature | Details |
 |---------|---------|
 | UFW firewall | deny-by-default, allow custom SSH port + 80 + 443 + 3000 |
-| DOCKER-USER chain | deny-by-default for Docker containers, allow 80 + 443 + 3000 + internal networks |
+| DOCKER-USER chain | deny-by-default for Docker containers, allow 80 + 443 + internal networks — persisted via `docker-firewall.service` (survives Docker restarts) |
 | Rate limiting | 6 connections/30s per IP on custom SSH port |
 | Fail2Ban | 3 attempts = 1h ban |
 | DNS-over-TLS | Quad9 (9.9.9.9) + DNSSEC |
@@ -226,8 +226,10 @@ sudo ./check.sh
 sudo ufw delete allow 3000/tcp
 # Remove from Docker's firewall chain
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
-sudo netfilter-persistent save
+sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 ```
+
+> No `netfilter-persistent save` needed — port 3000 is not in the persistent `docker-firewall.service`, so it won't come back after reboot.
 
 > If using an external firewall, also close port 3000 in your provider's control panel.
 
