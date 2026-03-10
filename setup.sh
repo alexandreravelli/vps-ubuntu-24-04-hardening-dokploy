@@ -570,8 +570,11 @@ sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 # Ubuntu 24.04 uses ssh.socket by default; switch to ssh.service for reliable port binding
 sudo systemctl disable --now ssh.socket 2>/dev/null || true
 sudo systemctl enable ssh.service
+sudo systemctl start ssh.service 2>/dev/null || true
 log "SSH socket disabled, using direct service"
 
+# AllowUsers is intentionally omitted here -- added only after the new connection is verified
+# so the current user can still reconnect on port 22 if something goes wrong before CONFIRM
 sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port 22
 Port $SSH_PORT
@@ -584,10 +587,10 @@ X11Forwarding no
 AllowTcpForwarding no
 ClientAliveInterval 300
 ClientAliveCountMax 2
-AllowUsers $NEW_USER
 EOF
 
-sudo systemctl restart ssh
+# Use reload (SIGHUP) instead of restart -- applies new config without dropping active SSH sessions
+sudo systemctl reload ssh
 log "SSH hardened (ports: 22 + $SSH_PORT, password auth still enabled)"
 
 # === STEP 8: INSTALL DOCKER ===
@@ -721,7 +724,8 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 AllowUsers $NEW_USER
 EOF
-        sudo systemctl restart ssh
+        # Use reload instead of restart -- script session stays alive to finish the remaining steps
+        sudo systemctl reload ssh
         sudo ufw delete allow 22/tcp
 
         sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
