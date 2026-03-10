@@ -11,7 +11,7 @@ A clear and concise description of what the bug is.
 
 ## 📋 Environment
 - **Ubuntu Version:** (e.g., 24.04 LTS)
-- **Script Version:** (e.g., v2.2.0)
+- **Commit:** (run `git log -1 --oneline` on the server)
 - **VPS Provider:** (e.g., OVH, DigitalOcean, AWS)
 - **Installation Method:** (e.g., git clone, curl)
 

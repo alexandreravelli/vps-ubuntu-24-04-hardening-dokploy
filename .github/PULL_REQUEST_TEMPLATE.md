@@ -42,7 +42,6 @@ Fixes #(issue number)
 - [ ] My changes generate no new warnings or errors
 - [ ] I have tested my changes on Ubuntu 24.04 LTS
 - [ ] Any dependent changes have been merged and published
-- [ ] I have updated the CHANGELOG.md (if applicable)
 - [ ] No sensitive information (passwords, keys, IPs) in commits
 
 ## 📝 Additional Notes

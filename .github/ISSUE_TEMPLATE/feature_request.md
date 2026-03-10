@@ -35,3 +35,4 @@ If applicable, add mockups, screenshots, or examples.
 - [ ] This feature aligns with the project's goals
 - [ ] I have described the use case clearly
 - [ ] I am willing to help implement this feature
+- [ ] This feature does not break existing hardening steps

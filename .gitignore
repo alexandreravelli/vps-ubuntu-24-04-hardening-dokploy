@@ -35,9 +35,3 @@ desktop.ini
 
 # Test files
 test_output/
-
-# Documentation (kept in repo but not deployed)
-CONTRIBUTING.md
-CHANGELOG.md
-IMPROVEMENTS.md
-SSH_KEY_HELP.md

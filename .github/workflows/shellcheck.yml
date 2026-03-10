@@ -18,14 +18,8 @@ jobs:
       - name: Install ShellCheck
         run: sudo apt-get install -y shellcheck
 
-      - name: Run ShellCheck on setup.sh
-        run: shellcheck -x -s bash -S warning setup.sh
-
-      - name: Run ShellCheck on cleanup.sh
-        run: shellcheck -x -s bash -S warning cleanup.sh
-
-      - name: Run ShellCheck on check.sh
-        run: shellcheck -x -s bash -S warning check.sh
+      - name: Run ShellCheck
+        run: shellcheck -x -s bash -S warning setup.sh cleanup.sh check.sh
 
       - name: Syntax check
         run: |
