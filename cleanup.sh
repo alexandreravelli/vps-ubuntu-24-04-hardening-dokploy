@@ -17,9 +17,15 @@ warn() { gum style --foreground 3 "  [!] $1"; }
 error() { gum style --foreground 1 --bold "  [X] $1"; exit 1; }
 
 echo ""
-printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
-printf "  \033[1;34mPOST-INSTALLATION CLEANUP\033[0m\n"
-printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
+gum style \
+    --border rounded \
+    --border-foreground 4 \
+    --padding "0 4" \
+    --margin "0 2" \
+    --bold \
+    --align center \
+    "POST-INSTALLATION CLEANUP" \
+    "Remove the old default user"
 echo ""
 
 CURRENT_USER=$(whoami)

@@ -42,16 +42,21 @@ warn_check() {
 
 section() {
     echo ""
-    printf "  \033[1m%s\033[0m\n" "$1"
-    printf "  \033[0;90m%s\033[0m\n" "$(printf '%*s' "${#1}" '' | tr ' ' '-')"
+    gum style --bold --foreground 6 "  $1"
+    gum style --foreground 240 "  ──────────────────────────────────────────────"
 }
 
 # === HEADER ===
 echo ""
-printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
-printf "  \033[1;34mVPS HARDENING CHECK  v%s\033[0m\n" "$VERSION"
-printf "  \033[0;90mPost-install security audit\033[0m\n"
-printf "  \033[1;34m──────────────────────────────────────────────\033[0m\n"
+gum style \
+    --border rounded \
+    --border-foreground 4 \
+    --padding "0 4" \
+    --margin "0 2" \
+    --bold \
+    --align center \
+    "VPS HARDENING CHECK  v$VERSION" \
+    "Post-install security audit"
 
 # === SSH ===
 section "SSH Configuration"
@@ -87,7 +92,7 @@ if [ -f /etc/ssh/sshd_config.d/hardening.conf ]; then
         ALLOWED=$(grep "AllowUsers" /etc/ssh/sshd_config.d/hardening.conf | awk '{$1=""; print $0}' | xargs)
         pass "AllowUsers restricted to: $ALLOWED"
     else
-        warn_check "AllowUsers not configured"
+        warn_check "AllowUsers not yet set (normal if final SSH confirmation not done)"
     fi
 
     SSH_PORT=$(grep "^Port " /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null | tail -1 | awk '{print $2}')
@@ -283,7 +288,12 @@ if swapon --show | grep -q "/swapfile"; then
     SWAP_SIZE=$(swapon --show | grep "/swapfile" | awk '{print $3}')
     pass "Swap active ($SWAP_SIZE)"
 else
-    warn_check "No swap detected"
+    TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$TOTAL_MEM_MB" -gt 16384 ]; then
+        pass "No swap (intentional -- $(( TOTAL_MEM_MB / 1024 ))GB RAM detected)"
+    else
+        warn_check "No swap detected"
+    fi
 fi
 
 CURRENT_TZ=$(timedatectl show --property=Timezone --value 2>/dev/null || echo "unknown")
@@ -350,16 +360,22 @@ fi
 TOTAL=$((PASS_COUNT + FAIL_COUNT + WARN_COUNT))
 
 echo ""
-printf "  \033[1m──────────────────────────────────────────────\033[0m\n"
-printf "  PASS: \033[0;32m%s\033[0m  FAIL: \033[0;31m%s\033[0m  WARN: \033[0;33m%s\033[0m  TOTAL: %s\n" \
-    "$PASS_COUNT" "$FAIL_COUNT" "$WARN_COUNT" "$TOTAL"
-printf "  \033[1m──────────────────────────────────────────────\033[0m\n"
-echo ""
 if [ "$FAIL_COUNT" -eq 0 ] && [ "$WARN_COUNT" -eq 0 ]; then
-    printf "  \033[1;32mYour server is fully hardened.\033[0m\n"
+    VERDICT="Your server is fully hardened."
+    VERDICT_COLOR=2
 elif [ "$FAIL_COUNT" -eq 0 ]; then
-    printf "  \033[1;33mYour server is mostly hardened. Review warnings above.\033[0m\n"
+    VERDICT="Mostly hardened. Review warnings above."
+    VERDICT_COLOR=3
 else
-    printf "  \033[1;31mYour server has security issues. Fix failures above.\033[0m\n"
+    VERDICT="Security issues detected. Fix failures above."
+    VERDICT_COLOR=1
 fi
+
+gum style \
+    --border rounded \
+    --border-foreground "$VERDICT_COLOR" \
+    --padding "0 2" \
+    --margin "0 2" \
+    "$(gum style --foreground 2 "PASS: $PASS_COUNT")  $(gum style --foreground 1 "FAIL: $FAIL_COUNT")  $(gum style --foreground 3 "WARN: $WARN_COUNT")  TOTAL: $TOTAL" \
+    "$(gum style --bold --foreground "$VERDICT_COLOR" "$VERDICT")"
 echo ""

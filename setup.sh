@@ -135,8 +135,8 @@ error() {
 
 input_banner() {
     echo ""
-    printf "  \033[1;36m INPUT REQUIRED \033[0m\n"
-    printf "  \033[0;36m%s\033[0m\n" "$1"
+    gum style --bold --foreground 6 "  INPUT REQUIRED"
+    gum style --foreground 6 "  $1"
     echo ""
 }
 
@@ -223,8 +223,8 @@ if ! grep -q "Ubuntu 24" /etc/os-release 2>/dev/null; then
     warn "This script is designed for Ubuntu 24.04 LTS"
 fi
 
-if ! ping -c 1 8.8.8.8 &>/dev/null; then
-    error "No internet connection"
+if ! curl -s --max-time 5 https://api.ipify.org &>/dev/null; then
+    error "No internet connection (TCP/443 unreachable)"
 fi
 log "All pre-checks passed"
 
@@ -328,24 +328,27 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
     sudo chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
 
     echo ""
-    printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
-    printf "  \033[1;33mIMPORTANT: Save your private key NOW\033[0m\n"
-    printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
-    echo ""
-    printf "  This key will be DELETED from the server after this step.\n"
-    printf "  Select from -----BEGIN to END----- (included) and copy.\n"
-    echo ""
-    printf "  Save to:  ~/.ssh/id_ed25519  (Linux/Mac)\n"
-    printf "            C:\\Users\\YOU\\.ssh\\id_ed25519  (Windows)\n"
-    printf "  Then run: chmod 600 ~/.ssh/id_ed25519\n"
+    gum style \
+        --border rounded \
+        --border-foreground 3 \
+        --foreground 3 \
+        --padding "0 2" \
+        --margin "0 2" \
+        "⚠  IMPORTANT: Save your private key NOW" \
+        "This key will be DELETED from the server after this step." \
+        "" \
+        "Select from -----BEGIN to END OPENSSH PRIVATE KEY----- (included) and copy." \
+        "Save to:  ~/.ssh/id_ed25519  (Linux/Mac)" \
+        "          C:\\Users\\YOU\\.ssh\\id_ed25519  (Windows)" \
+        "Then run: chmod 600 ~/.ssh/id_ed25519"
     echo ""
 
-    printf "  \033[1mPrivate key:\033[0m\n"
+    gum style --bold --foreground 6 "  Private key:"
     echo ""
     cat "$TEMP_KEY_PATH"
     echo ""
 
-    printf "  \033[1mPublic key:\033[0m\n"
+    gum style --bold --foreground 6 "  Public key:"
     echo ""
     cat "$TEMP_KEY_PATH.pub"
     echo ""
@@ -654,26 +657,30 @@ fi
 # Docker firewall: deny-by-default on DOCKER-USER, allow only needed ports
 run_with_spinner "Installing iptables-persistent" bash -c 'echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections && echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections && sudo apt-get install -y -qq iptables-persistent'
 
-sudo iptables -I DOCKER-USER -j DROP
-sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
-sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
-sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
-sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
-sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
-sudo iptables -I DOCKER-USER -i lo -j ACCEPT
+run_with_spinner "Configuring DOCKER-USER firewall rules" bash -c '
+    sudo iptables -I DOCKER-USER -j DROP
+    sudo iptables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
+    sudo iptables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
+    sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
+    sudo iptables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    sudo iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
+    sudo iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
+    sudo iptables -I DOCKER-USER -i lo -j ACCEPT
+'
 
 # Same rules for IPv6 (if Docker manages ip6tables)
 if sudo ip6tables -L DOCKER-USER &>/dev/null 2>&1; then
-    sudo ip6tables -I DOCKER-USER -j DROP 2>/dev/null || true
-    sudo ip6tables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
-    sudo ip6tables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
-    sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-    sudo ip6tables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
-    sudo ip6tables -I DOCKER-USER -i lo -j ACCEPT 2>/dev/null || true
+    run_with_spinner "Configuring DOCKER-USER IPv6 firewall rules" bash -c '
+        sudo ip6tables -I DOCKER-USER -j DROP 2>/dev/null || true
+        sudo ip6tables -I DOCKER-USER -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+        sudo ip6tables -I DOCKER-USER -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+        sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
+        sudo ip6tables -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+        sudo ip6tables -I DOCKER-USER -i lo -j ACCEPT 2>/dev/null || true
+    '
 fi
 
-sudo netfilter-persistent save > /dev/null 2>&1
+run_with_spinner "Saving firewall rules" sudo netfilter-persistent save
 log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 3000)"
 
 # === STEP 9: INSTALL DOKPLOY ===
@@ -708,23 +715,29 @@ SETUP_PHASE="ssh-test"
 
 PUBLIC_IP=$(curl -s --max-time 10 ifconfig.me || echo "UNKNOWN")
 
-printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
-printf "  \033[1;33mCRITICAL: Test your SSH connection before continuing\033[0m\n"
-printf "  \033[1;33m──────────────────────────────────────────────\033[0m\n"
-echo ""
-printf "  \033[1;31mWARNING:\033[0m If your VPS provider has an external firewall\n"
-printf "  (OVH, Hetzner, AWS, etc.), you MUST open port %s\n" "$SSH_PORT"
-printf "  in their control panel BEFORE testing your connection.\n"
-echo ""
-printf "  Open a NEW terminal and run:\n"
-echo ""
+gum style \
+    --border rounded \
+    --border-foreground 1 \
+    --foreground 1 \
+    --padding "0 2" \
+    --margin "0 2" \
+    --bold \
+    "CRITICAL: Test your SSH connection before continuing" \
+    "" \
+    "External firewall (OVH, Hetzner, AWS...): open port $SSH_PORT first." \
+    "Open a NEW terminal and run:"
 copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
 
 if gum confirm "Did SSH work on port $SSH_PORT?"; then
     echo ""
-    printf "  \033[1;33mWARNING:\033[0m This will permanently close port 22\n"
-    printf "  and disable password authentication.\n"
-    printf "  Make sure you can connect via:\n"
+    gum style \
+        --border rounded \
+        --border-foreground 3 \
+        --foreground 3 \
+        --padding "0 2" \
+        --margin "0 2" \
+        "⚠  This will permanently close port 22 and disable password auth." \
+        "Make sure you can connect via:"
     copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
 
     CONFIRM_CLOSE=$(gum input --placeholder "Type CONFIRM to proceed, anything else to cancel" --prompt "> " --prompt.foreground 3)
@@ -789,7 +802,7 @@ elif ! id "$OLD_USER" &>/dev/null; then
     log "User '$OLD_USER' doesn't exist (already removed)"
 else
     echo ""
-    printf "  \033[1mOptional: Remove old user '%s'\033[0m\n" "$OLD_USER"
+    gum style --bold --foreground 6 "  Optional: Remove old user '$OLD_USER'"
     echo ""
 
     if [ "$OLD_USER" = "$(whoami)" ]; then
@@ -846,23 +859,31 @@ ELAPSED=$(( SECONDS - START_TIME ))
 ELAPSED_MIN=$(( ELAPSED / 60 ))
 ELAPSED_SEC=$(( ELAPSED % 60 ))
 
-printf "  \033[1;32m──────────────────────────────────────────────────\033[0m\n"
-printf "  \033[1;32mSERVER READY\033[0m  \033[0;90m(%dm %ds)\033[0m\n" "$ELAPSED_MIN" "$ELAPSED_SEC"
-printf "  \033[1;32m──────────────────────────────────────────────────\033[0m\n"
+gum style \
+    --border double \
+    --border-foreground 2 \
+    --padding "1 4" \
+    --margin "0 2" \
+    --bold \
+    --align center \
+    "SERVER READY  (${ELAPSED_MIN}m ${ELAPSED_SEC}s)"
+
 echo ""
-printf "  \033[1mSSH\033[0m      ssh %s@%s -p %s\n" "$NEW_USER" "$PUBLIC_IP" "$SSH_PORT"
-printf "  \033[1mDokploy\033[0m  http://%s:3000\n" "$PUBLIC_IP"
-printf "  \033[1mLog\033[0m      %s\n" "$LOG_FILE"
+gum style --bold --foreground 2 "  CONNECT"
+gum style --foreground 240 "  ──────────────────────────────────────────────────"
+printf "  $(gum style --bold 'SSH')      ssh %s@%s -p %s\n" "$NEW_USER" "$PUBLIC_IP" "$SSH_PORT"
+printf "  $(gum style --bold 'Dokploy')  http://%s:3000\n" "$PUBLIC_IP"
+printf "  $(gum style --bold 'Log')      %s\n" "$LOG_FILE"
 echo ""
-printf "  \033[1mNext steps:\033[0m\n"
-printf "  1. Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
-printf "  2. Run ./cleanup.sh  -- remove old default user\n"
-printf "  3. Run ./check.sh   -- verify hardening\n"
-printf "  4. Setup Dokploy at http://%s:3000\n" "$PUBLIC_IP"
-printf "  5. After SSL, close port 3000:\n"
-printf "     sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT && sudo netfilter-persistent save\n"
-echo ""
-printf "  \033[1;32m──────────────────────────────────────────────────\033[0m\n"
+gum style --bold --foreground 2 "  NEXT STEPS"
+gum style --foreground 240 "  ──────────────────────────────────────────────────"
+printf "  $(gum style --bold --foreground 6 '1')  Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
+printf "  $(gum style --bold --foreground 6 '2')  Run ./cleanup.sh  -- remove old default user\n"
+printf "  $(gum style --bold --foreground 6 '3')  Run ./check.sh    -- verify hardening\n"
+printf "  $(gum style --bold --foreground 6 '4')  Setup Dokploy at http://%s:3000\n" "$PUBLIC_IP"
+printf "  $(gum style --bold --foreground 6 '5')  After SSL, close port 3000:\n"
+printf "       sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT\n"
+printf "       sudo netfilter-persistent save\n"
 echo ""
 
 printf '\a'  # Terminal bell -- audible notification that setup is complete
