@@ -584,18 +584,11 @@ SETUP_PHASE="ssh"
 
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
-# Ubuntu 24.04 uses ssh.socket by default; must switch to ssh.service for multi-port binding
-# Sequence matters:
-#   1. stop socket FIRST (releases port 22) -- established sessions survive, only listener stops
-#   2. start service (now it can bind to port 22 AND $SSH_PORT)
-#   3. disable socket for future boots
-sudo systemctl stop ssh.socket 2>/dev/null || true
-sudo systemctl enable ssh.service
-sudo systemctl start ssh.service
-sudo systemctl disable ssh.socket 2>/dev/null || true
-# Verify the service is actually running before applying config
-sudo systemctl is-active ssh.service > /dev/null || error "SSH service failed to start after socket handoff"
-log "SSH socket stopped, using direct service"
+# Ubuntu 24.04 uses ssh.socket which ties active sessions to the socket unit.
+# Stopping or restarting the socket kills all active sessions (PartOf= dependency).
+# Solution: never touch ssh.socket -- start a standalone sshd on $SSH_PORT instead.
+# The socket stays alive for the current session; the standalone sshd opens the new port.
+# ssh.socket is only disabled for next boot; ssh.service takes over after reboot.
 
 # AllowUsers is intentionally omitted here -- added only after the new connection is verified
 # so the current user can still reconnect on port 22 if something goes wrong before CONFIRM
@@ -613,11 +606,20 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 EOF
 
-# Validate config before reload -- prevents applying a broken config that could lock out SSH
+# Validate config
 sudo sshd -t || error "SSH config validation failed -- not applying"
-# Use reload (SIGHUP) instead of restart -- applies new config without dropping active SSH sessions
-sudo systemctl reload ssh
-log "SSH hardened (ports: 22 + $SSH_PORT, password auth still enabled)"
+
+# Start a standalone sshd ONLY on $SSH_PORT
+# -p overrides all Port directives so it only binds to $SSH_PORT, not port 22
+# This does not affect ssh.socket or the current session in any way
+sudo sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
+
+# Prepare for next reboot: ssh.socket off, ssh.service on
+# (takes effect after reboot -- we do NOT stop the socket now)
+sudo systemctl disable ssh.socket 2>/dev/null || true
+sudo systemctl enable ssh.service
+
+log "SSH hardened (port 22 via socket, port $SSH_PORT via standalone sshd)"
 
 # === STEP 8: INSTALL DOCKER ===
 CURRENT_STEP=8
@@ -787,10 +789,15 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 AllowUsers $NEW_USER
 EOF
-        # Validate config before reload -- prevents applying a broken config that could lock out SSH
+        # Validate config
         sudo sshd -t || error "SSH config validation failed -- not applying"
-        # Use reload instead of restart -- script session stays alive to finish the remaining steps
-        sudo systemctl reload ssh
+        # Restart standalone sshd with new config (no password auth, AllowUsers applied)
+        # Port 22 session is unaffected -- we never touch ssh.socket
+        sudo kill "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
+        sleep 1
+        sudo sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
+        # Block port 22 at firewall level -- ssh.socket keeps running but nothing can reach it
+        # It will stop permanently on next reboot (disabled in step 7)
         sudo ufw delete allow 22/tcp
 
         sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
