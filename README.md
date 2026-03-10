@@ -51,6 +51,9 @@ Connect to your VPS and run:
 
 ```bash
 sudo -i  # switch to root (required)
+```
+
+```bash
 curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
