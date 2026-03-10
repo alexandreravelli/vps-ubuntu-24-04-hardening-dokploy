@@ -728,7 +728,14 @@ log "Post-install scripts downloaded (cleanup.sh, check.sh)"
 progress_bar "$TOTAL_STEPS" "$TOTAL_STEPS" "All steps completed"
 SETUP_PHASE="ssh-test"
 
-PUBLIC_IP=$(curl -s --max-time 10 ifconfig.me || echo "UNKNOWN")
+# Force IPv4 -- IPv6 addresses require brackets in SSH commands and confuse most users
+PUBLIC_IP=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || curl -s --max-time 10 https://api.ipify.org 2>/dev/null || echo "UNKNOWN")
+# Wrap IPv6 addresses in brackets for valid SSH syntax (ssh user@[ipv6] -p port)
+if echo "$PUBLIC_IP" | grep -q ":"; then
+    SSH_HOST="[$PUBLIC_IP]"
+else
+    SSH_HOST="$PUBLIC_IP"
+fi
 
 gum style \
     --border rounded \
@@ -741,7 +748,7 @@ gum style \
     "" \
     "External firewall (OVH, Hetzner, AWS...): open port $SSH_PORT first." \
     "Open a NEW terminal and run:"
-copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
+copy_block "ssh $NEW_USER@$SSH_HOST -p $SSH_PORT"
 
 if gum confirm "Did SSH work on port $SSH_PORT?"; then
     echo ""
@@ -753,7 +760,7 @@ if gum confirm "Did SSH work on port $SSH_PORT?"; then
         --margin "0 2" \
         "⚠  This will permanently close port 22 and disable password auth." \
         "Make sure you can connect via:"
-    copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
+    copy_block "ssh $NEW_USER@$SSH_HOST -p $SSH_PORT"
 
     CONFIRM_CLOSE=$(gum input --placeholder "Type CONFIRM to proceed, anything else to cancel" --prompt "> " --prompt.foreground 3)
 
@@ -828,7 +835,7 @@ else
         printf "  To remove this user safely:\n"
         printf "  1. Disconnect from this session\n"
         printf "  2. Login as '%s':\n" "$NEW_USER"
-        copy_block "ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT"
+        copy_block "ssh $NEW_USER@$SSH_HOST -p $SSH_PORT"
         printf "  3. Run: sudo deluser --remove-home %s\n" "$OLD_USER"
     else
         if gum confirm "Remove user '$OLD_USER'?"; then
@@ -864,7 +871,7 @@ HOST=$PUBLIC_IP
 USER=$NEW_USER
 SSH_PORT=$SSH_PORT
 DOKPLOY_URL=http://$PUBLIC_IP:3000
-SSH_CMD=ssh $NEW_USER@$PUBLIC_IP -p $SSH_PORT
+SSH_CMD=ssh $NEW_USER@$SSH_HOST -p $SSH_PORT
 LOG_FILE=$LOG_FILE
 EOF
 sudo chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.vps_setup_summary"
@@ -888,7 +895,7 @@ gum style \
 echo ""
 gum style --bold --foreground 2 "  CONNECT"
 gum style --foreground 240 "  ──────────────────────────────────────────────────"
-printf "  $(gum style --bold 'SSH')      ssh %s@%s -p %s\n" "$NEW_USER" "$PUBLIC_IP" "$SSH_PORT"
+printf "  $(gum style --bold 'SSH')      ssh %s@%s -p %s\n" "$NEW_USER" "$SSH_HOST" "$SSH_PORT"
 printf "  $(gum style --bold 'Dokploy')  http://%s:3000\n" "$PUBLIC_IP"
 printf "  $(gum style --bold 'Log')      %s\n" "$LOG_FILE"
 echo ""
