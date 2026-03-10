@@ -718,10 +718,10 @@ SETUP_PHASE="dokploy"
 run_with_log "Installing Dokploy" bash -c 'timeout 600 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
 
-# Dokploy install script removes UFW (conflicts with Docker iptables management).
+# Dokploy install script removes UFW and netfilter-persistent (conflicts with Docker iptables).
 # Reinstall and re-apply all rules so the firewall is active again.
-if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
-    run_with_spinner "Reinstalling UFW (removed by Dokploy)" sudo apt-get install -y -qq ufw
+if ! dpkg -l ufw 2>/dev/null | grep -q "^ii" || ! dpkg -l netfilter-persistent 2>/dev/null | grep -q "^ii"; then
+    run_with_spinner "Reinstalling UFW + netfilter-persistent (removed by Dokploy)" sudo apt-get install -y -qq ufw netfilter-persistent iptables-persistent
     sudo ufw --force reset > /dev/null
     sudo ufw default deny incoming > /dev/null
     sudo ufw default allow outgoing > /dev/null
