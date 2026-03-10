@@ -222,7 +222,9 @@ sudo ./check.sh
 4. Close port 3000 (only needed for initial setup):
 
 ```bash
-# Remove the Dokploy port from Docker's firewall chain
+# Remove from UFW (host firewall)
+sudo ufw delete allow 3000/tcp
+# Remove from Docker's firewall chain
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
 sudo netfilter-persistent save
 ```
