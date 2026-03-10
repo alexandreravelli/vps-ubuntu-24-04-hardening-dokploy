@@ -597,6 +597,9 @@ SETUP_PHASE="ssh"
 
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
+# Validate sshd binary is available before making any config changes
+[ -x /usr/sbin/sshd ] || error "sshd binary not found at /usr/sbin/sshd -- is openssh-server installed?"
+
 # Ubuntu 24.04 uses ssh.socket which ties active sessions to the socket unit.
 # Stopping or restarting the socket kills all active sessions (PartOf= dependency).
 # Solution: never touch ssh.socket -- start a standalone sshd on $SSH_PORT instead.
@@ -673,8 +676,11 @@ log "Docker log rotation configured"
 
 # Initialize Docker Swarm (required for Dokploy/Traefik)
 if ! sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
-    # Force IPv4, filter out all private ranges from fallback to get the real public-facing interface
-    SWARM_ADDR=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || hostname -I | tr ' ' '\n' | grep -vE '^(127\.|172\.|10\.|192\.168\.)' | head -1)
+    SWARM_ADDR=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || \
+                 curl -s --max-time 10 -6 ifconfig.me 2>/dev/null || \
+                 hostname -I | tr ' ' '\n' | grep -vE '^(127\.|172\.|10\.|192\.168\.)' | head -1 || \
+                 true)
+    [ -n "$SWARM_ADDR" ] || error "Could not determine public IP for Docker Swarm -- check network connectivity"
     run_with_spinner "Initializing Docker Swarm" sudo docker swarm init --advertise-addr "$SWARM_ADDR"
     log "Docker Swarm initialized (required for Traefik)"
 else
@@ -755,6 +761,13 @@ if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
     log "UFW reinstalled and reconfigured after Dokploy (port 22 intentionally blocked)"
 fi
 
+# Re-apply needrestart SSH protection (Dokploy install may have altered it)
+sudo mkdir -p /etc/needrestart/conf.d
+sudo tee /etc/needrestart/conf.d/99-no-ssh-restart.conf > /dev/null << 'NEEDRESTART'
+$nrconf{override_rc}{q(ssh)} = 0;
+$nrconf{override_rc}{q(sshd)} = 0;
+NEEDRESTART
+
 # Re-apply DOCKER-USER rules via the systemd service (Dokploy may have restarted Docker)
 run_with_spinner "Re-applying DOCKER-USER firewall rules" sudo systemctl restart docker-firewall
 # Re-add port 3000 (temporary -- flushed by service restart)
@@ -786,8 +799,11 @@ log "Post-install scripts downloaded (cleanup.sh, check.sh)"
 progress_bar "$TOTAL_STEPS" "$TOTAL_STEPS" "All steps completed"
 SETUP_PHASE="ssh-test"
 
-# Force IPv4 -- IPv6 addresses require brackets in SSH commands and confuse most users
-PUBLIC_IP=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || curl -s --max-time 10 https://api.ipify.org 2>/dev/null || echo "UNKNOWN")
+# Try IPv4 first; fall back to IPv6 (brackets added below for SSH syntax); last resort: UNKNOWN
+PUBLIC_IP=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || \
+            curl -s --max-time 10 https://api.ipify.org 2>/dev/null || \
+            curl -s --max-time 10 -6 ifconfig.me 2>/dev/null || \
+            echo "UNKNOWN")
 # Wrap IPv6 addresses in brackets for valid SSH syntax (ssh user@[ipv6] -p port)
 if echo "$PUBLIC_IP" | grep -q ":"; then
     SSH_HOST="[$PUBLIC_IP]"

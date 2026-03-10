@@ -191,6 +191,8 @@ ssh your-user@your-ip -p <SSH_PORT>
 # Full command is saved in ~/.vps_setup_summary
 ```
 
+> **IPv6 server?** Use brackets: `ssh your-user@[2001:db8::1] -p <SSH_PORT>` — the script handles this automatically in its output.
+
 ### Remove default user
 
 > `cleanup.sh` and `check.sh` are automatically downloaded to your home directory during setup.

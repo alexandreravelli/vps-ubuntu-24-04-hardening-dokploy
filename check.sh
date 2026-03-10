@@ -117,6 +117,12 @@ else
     fail "SSH service NOT running"
 fi
 
+if /usr/sbin/sshd -t 2>/dev/null; then
+    pass "SSH config valid"
+else
+    fail "SSH config validation failed -- run: sudo /usr/sbin/sshd -t"
+fi
+
 if systemctl is-enabled ssh.socket &>/dev/null 2>&1; then
     warn_check "SSH socket still enabled (should use ssh.service)"
 else
@@ -145,15 +151,27 @@ else
 fi
 
 if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
-    pass "DOCKER-USER deny-by-default rule present"
+    pass "DOCKER-USER deny-by-default rule present (IPv4)"
 else
     warn_check "DOCKER-USER DROP rule missing -- Docker containers may be exposed"
+fi
+
+if sudo ip6tables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
+    pass "DOCKER-USER deny-by-default rule present (IPv6)"
+else
+    warn_check "DOCKER-USER IPv6 DROP rule missing -- Docker containers may be exposed on IPv6"
 fi
 
 if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -qE "dpt:80|dpt:443"; then
     pass "DOCKER-USER allows ports 80 and 443"
 else
     warn_check "DOCKER-USER missing ACCEPT rules for 80/443"
+fi
+
+if systemctl is-active docker-firewall &>/dev/null; then
+    pass "docker-firewall.service active (DOCKER-USER rules persist across Docker restarts)"
+else
+    warn_check "docker-firewall.service not active -- DOCKER-USER rules may be lost after Docker restart"
 fi
 
 # === FAIL2BAN ===
@@ -189,10 +207,21 @@ check_sysctl() {
 }
 
 check_sysctl "net.ipv4.conf.all.rp_filter" "1" "IP spoofing protection"
+check_sysctl "net.ipv4.conf.default.rp_filter" "1" "IP spoofing protection (default)"
 check_sysctl "net.ipv4.icmp_echo_ignore_broadcasts" "1" "ICMP broadcast ignored"
 check_sysctl "net.ipv4.tcp_syncookies" "1" "SYN cookies enabled"
+check_sysctl "net.ipv4.tcp_max_syn_backlog" "2048" "SYN backlog"
+check_sysctl "net.ipv4.tcp_synack_retries" "2" "SYN ACK retries"
 check_sysctl "net.ipv4.conf.all.accept_redirects" "0" "ICMP redirects blocked"
+check_sysctl "net.ipv4.conf.default.accept_redirects" "0" "ICMP redirects blocked (default)"
 check_sysctl "net.ipv4.conf.all.send_redirects" "0" "Send redirects disabled"
+check_sysctl "net.ipv4.conf.all.accept_source_route" "0" "Source routing disabled"
+check_sysctl "net.ipv4.conf.default.accept_source_route" "0" "Source routing disabled (default)"
+check_sysctl "net.ipv4.conf.all.log_martians" "1" "Martian packet logging"
+check_sysctl "net.ipv4.conf.default.log_martians" "1" "Martian packet logging (default)"
+check_sysctl "net.ipv6.conf.all.accept_redirects" "0" "IPv6 ICMP redirects blocked"
+check_sysctl "net.ipv6.conf.default.accept_redirects" "0" "IPv6 ICMP redirects blocked (default)"
+check_sysctl "net.ipv6.conf.all.accept_source_route" "0" "IPv6 source routing disabled"
 check_sysctl "kernel.randomize_va_space" "2" "ASLR full randomization"
 check_sysctl "kernel.dmesg_restrict" "1" "Dmesg restricted"
 check_sysctl "kernel.kptr_restrict" "2" "Kernel pointers restricted"
