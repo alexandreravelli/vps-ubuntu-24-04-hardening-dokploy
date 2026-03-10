@@ -335,12 +335,7 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         --padding "0 2" \
         --margin "0 2" \
         "⚠  IMPORTANT: Save your private key NOW" \
-        "This key will be DELETED from the server after this step." \
-        "" \
-        "Select from -----BEGIN to END OPENSSH PRIVATE KEY----- (included) and copy." \
-        "Save to:  ~/.ssh/id_ed25519  (Linux/Mac)" \
-        "          C:\\Users\\YOU\\.ssh\\id_ed25519  (Windows)" \
-        "Then run: chmod 600 ~/.ssh/id_ed25519"
+        "This key will be DELETED from the server after this step."
     echo ""
 
     gum style --bold --foreground 6 "  Private key:"
