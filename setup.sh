@@ -718,6 +718,21 @@ SETUP_PHASE="dokploy"
 run_with_log "Installing Dokploy" bash -c 'timeout 600 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
 
+# Dokploy install script removes UFW (conflicts with Docker iptables management).
+# Reinstall and re-apply all rules so the firewall is active again.
+if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
+    run_with_spinner "Reinstalling UFW (removed by Dokploy)" sudo apt-get install -y -qq ufw
+    sudo ufw --force reset > /dev/null
+    sudo ufw default deny incoming > /dev/null
+    sudo ufw default allow outgoing > /dev/null
+    sudo ufw allow "$SSH_PORT/tcp" > /dev/null
+    sudo ufw allow 80/tcp > /dev/null
+    sudo ufw allow 443/tcp > /dev/null
+    sudo ufw allow 3000/tcp > /dev/null
+    sudo ufw --force enable > /dev/null
+    log "UFW reinstalled and reconfigured after Dokploy (port 22 intentionally blocked)"
+fi
+
 # Dokploy install may restart Docker, which flushes iptables DOCKER-USER rules -- re-apply if needed
 if ! sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
     run_with_spinner "Re-applying DOCKER-USER firewall rules (Docker was restarted)" bash -c '
