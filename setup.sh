@@ -200,7 +200,7 @@ echo ""
 SPEC_OS=$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || echo "Unknown")
 SPEC_KERNEL=$(uname -r)
 SPEC_CPU=$(nproc 2>/dev/null || echo "?")
-SPEC_RAM=$(free -h 2>/dev/null | awk '/^Mem:/{print $2}' || echo "?")
+SPEC_RAM=$(free -m 2>/dev/null | awk '/^Mem:/{printf "%.1f GB", $2/1024}' || echo "?")
 SPEC_DISK_TOTAL=$(df -h / 2>/dev/null | awk 'NR==2{print $2}' || echo "?")
 SPEC_DISK_FREE=$(df -h / 2>/dev/null | awk 'NR==2{print $4}' || echo "?")
 SPEC_IPV4=$(curl -s --max-time 3 -4 ifconfig.me 2>/dev/null || echo "not available")
@@ -213,21 +213,6 @@ printf "  %-12s %s\n" "RAM" "$SPEC_RAM"
 printf "  %-12s %s total / %s free\n" "Disk" "$SPEC_DISK_TOTAL" "$SPEC_DISK_FREE"
 printf "  %-12s %s\n" "IPv4" "$SPEC_IPV4"
 printf "  %-12s %s\n" "IPv6" "$SPEC_IPV6"
-printf "  %-12s %s (randomly assigned)\n" "SSH port" "$SSH_PORT"
-echo ""
-
-# Port status
-gum style --bold --foreground 6 "  PORT STATUS"
-gum style --foreground 240 "  ────────────────────────────────────────────────"
-echo ""
-for CHECK_PORT in 22 80 443; do
-    if ss -tlnp 2>/dev/null | grep -q ":${CHECK_PORT} "; then
-        printf "  %-12s \033[0;32mLISTENING\033[0m\n" "Port $CHECK_PORT"
-    else
-        printf "  %-12s \033[0;90mNOT LISTENING\033[0m\n" "Port $CHECK_PORT"
-    fi
-done
-printf "  %-12s \033[0;33mwill be opened\033[0m\n" "Port $SSH_PORT"
 echo ""
 
 # Cloud provider detection (metadata endpoint = external firewall likely exists)
@@ -254,8 +239,12 @@ if [ "$HAS_CLOUD_FIREWALL" = true ]; then
         --margin "0 2" \
         "⚠  EXTERNAL FIREWALL DETECTED" \
         "Open these ports in your provider's control panel BEFORE running:" \
-        "22  ·  80  ·  443  ·  3000 (Dokploy)  ·  $SSH_PORT (SSH)" \
-        "SSH port $SSH_PORT has been randomly assigned for this install."
+        "" \
+        "  22          SSH (temporary -- closed after setup)" \
+        "  80          HTTP" \
+        "  443         HTTPS" \
+        "  3000        Dokploy (temporary -- close after SSL)" \
+        "  $SSH_PORT      SSH (randomly assigned for this install)"
 else
     gum style \
         --border rounded \
@@ -265,7 +254,12 @@ else
         --margin "0 2" \
         "⚠  EXTERNAL FIREWALL" \
         "If your provider has a network firewall, open these ports BEFORE running:" \
-        "22  ·  80  ·  443  ·  3000 (Dokploy)" \
+        "" \
+        "  22          SSH (temporary -- closed after setup)" \
+        "  80          HTTP" \
+        "  443         HTTPS" \
+        "  3000        Dokploy (temporary -- close after SSL)" \
+        "" \
         "The final custom SSH port will be shown at the end."
 fi
 
