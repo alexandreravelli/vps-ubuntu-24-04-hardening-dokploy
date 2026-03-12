@@ -985,8 +985,8 @@ progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~2-5 min)"
 SETUP_PHASE="dokploy"
 
 # Save iptables rules before Dokploy (its install may flush all rules and kill SSH)
-sudo iptables-save > /tmp/iptables-pre-dokploy.v4 2>/dev/null || true
-sudo ip6tables-save > /tmp/iptables-pre-dokploy.v6 2>/dev/null || true
+sudo iptables-save 2>/dev/null | sudo tee /tmp/iptables-pre-dokploy.v4 > /dev/null || true
+sudo ip6tables-save 2>/dev/null | sudo tee /tmp/iptables-pre-dokploy.v6 > /dev/null || true
 
 run_with_log "Installing Dokploy" bash -c 'timeout 900 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
