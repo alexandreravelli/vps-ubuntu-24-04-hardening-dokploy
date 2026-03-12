@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="VPS Hardening Script welcome screen" width="700">
+  <img src="assets/welcome-screen.png" alt="VPS Hardening Script welcome screen" width="700">
 </p>
 
 ---
