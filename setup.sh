@@ -224,38 +224,36 @@ for CHECK_PORT in 22 80 443; do
     if ss -tlnp 2>/dev/null | grep -q ":${CHECK_PORT} "; then
         printf "  %-12s \033[0;32mLISTENING\033[0m\n" "Port $CHECK_PORT"
     else
-        printf "  %-12s \033[0;90mclosed\033[0m\n" "Port $CHECK_PORT"
+        printf "  %-12s \033[0;90mNOT LISTENING\033[0m\n" "Port $CHECK_PORT"
     fi
 done
 printf "  %-12s \033[0;33mwill be opened\033[0m\n" "Port $SSH_PORT"
 echo ""
 
-# Cloud provider detection
-CLOUD_PROVIDER=""
+# Cloud provider detection (metadata endpoint = external firewall likely exists)
+HAS_CLOUD_FIREWALL=false
 if curl -s --max-time 2 -H "Metadata-Flavor: Google" http://169.254.169.254/computeMetadata/v1/ &>/dev/null; then
-    CLOUD_PROVIDER="GCP"
+    HAS_CLOUD_FIREWALL=true
 elif curl -s --max-time 2 http://169.254.169.254/latest/meta-data/ &>/dev/null; then
-    CLOUD_PROVIDER="AWS"
+    HAS_CLOUD_FIREWALL=true
 elif curl -s --max-time 2 http://169.254.169.254/hetzner/v1/metadata &>/dev/null; then
-    CLOUD_PROVIDER="Hetzner"
+    HAS_CLOUD_FIREWALL=true
 elif curl -s --max-time 2 http://169.254.169.254/openstack/latest/ &>/dev/null; then
-    CLOUD_PROVIDER="OVH"
-elif grep -qi "digitalocean" /sys/class/dmi/id/board_vendor 2>/dev/null; then
-    CLOUD_PROVIDER="DigitalOcean"
-elif grep -qi "vultr" /sys/class/dmi/id/board_vendor 2>/dev/null; then
-    CLOUD_PROVIDER="Vultr"
+    HAS_CLOUD_FIREWALL=true
+elif grep -qi "digitalocean\|vultr" /sys/class/dmi/id/board_vendor 2>/dev/null; then
+    HAS_CLOUD_FIREWALL=true
 fi
 
 # Firewall warning box
-if [ -n "$CLOUD_PROVIDER" ]; then
+if [ "$HAS_CLOUD_FIREWALL" = true ]; then
     gum style \
         --border rounded \
         --border-foreground 3 \
         --foreground 3 \
         --padding "0 2" \
         --margin "0 2" \
-        "⚠  EXTERNAL FIREWALL ($CLOUD_PROVIDER detected)" \
-        "Open these ports in your $CLOUD_PROVIDER control panel BEFORE running:" \
+        "⚠  EXTERNAL FIREWALL DETECTED" \
+        "Open these ports in your provider's control panel BEFORE running:" \
         "22  ·  80  ·  443  ·  3000 (Dokploy)  ·  $SSH_PORT (SSH)" \
         "SSH port $SSH_PORT has been randomly assigned for this install."
 else
@@ -265,8 +263,8 @@ else
         --foreground 3 \
         --padding "0 2" \
         --margin "0 2" \
-        "⚠  EXTERNAL FIREWALL (OVH, Hetzner, AWS...)" \
-        "Open these ports BEFORE running the script:" \
+        "⚠  EXTERNAL FIREWALL" \
+        "If your provider has a network firewall, open these ports BEFORE running:" \
         "22  ·  80  ·  443  ·  3000 (Dokploy)" \
         "The final custom SSH port will be shown at the end."
 fi
