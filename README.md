@@ -74,8 +74,8 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 1 | **User** | Create admin with sudo + strong password policy (12+ chars) | ~30s |
 | 2 | **SSH Key** | Paste existing key or generate ed25519 with optional passphrase | ~10s |
 | 3 | **System** | apt upgrade, auto-sized swap (2GB ≤4GB RAM / 4GB ≤16GB / skipped >16GB), Quad9 DNS-over-TLS + DNSSEC, UTC timezone | ~2-3min |
-| 4 | **Kernel** | sysctl: anti-spoofing, SYN flood protection, ASLR, dmesg restrict | ~5s |
-| 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades, log retention policy | ~1-2min |
+| 4 | **Kernel** | sysctl: anti-spoofing, SYN flood, ASLR, ptrace, core dumps, /tmp hardening, USB disable | ~5s |
+| 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, AIDE, unattended-upgrades, log retention policy | ~2-3min |
 | 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 + 3000 | ~5s |
 | 7 | **SSH** | Random port 50000-60000, key-only auth, no root login | ~5s |
 | 8 | **Docker** | Official APT repo + GPG + Docker Swarm + `docker-firewall.service` (DOCKER-USER deny-by-default, persisted across Docker restarts) | ~2-3min |
@@ -98,9 +98,11 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Root login disabled | `PermitRootLogin no` |
 | Key-only auth | Password auth disabled after confirmation |
 | Brute-force protection | MaxAuthTries 3, LoginGraceTime 30s |
-| Session control | ClientAliveInterval 300s, ClientAliveCountMax 2 |
+| Session control | ClientAliveInterval 300s, ClientAliveCountMax 2, MaxSessions 2 |
 | User whitelist | `AllowUsers` restricts to admin only |
-| Forwarding disabled | X11 + TCP forwarding off |
+| Forwarding disabled | X11, TCP, agent forwarding all off |
+| Strong ciphers | Mozilla Modern: chacha20-poly1305, aes256-gcm, curve25519 |
+| Extra hardening | PermitEmptyPasswords no, HostbasedAuthentication no, LogLevel VERBOSE |
 
 </details>
 
@@ -112,7 +114,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | UFW firewall | deny-by-default, allow custom SSH port + 80 + 443 + 3000 |
 | DOCKER-USER chain | deny-by-default for Docker containers, allow 80 + 443 + internal networks — persisted via `docker-firewall.service` (survives Docker restarts) |
 | Rate limiting | 6 connections/30s per IP on custom SSH port |
-| Fail2Ban | 3 attempts = 1h ban |
+| Fail2Ban | 3 attempts = 1h ban (systemd backend) |
 | DNS-over-TLS | Quad9 (9.9.9.9) + DNSSEC |
 
 </details>
@@ -124,9 +126,13 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 |---------|---------|
 | Anti-spoofing | `rp_filter`, martian logging |
 | SYN flood protection | `tcp_syncookies`, tuned backlog |
-| ICMP hardening | Redirects + broadcasts blocked |
+| ICMP hardening | Redirects + broadcasts + bogus errors blocked |
 | ASLR | Full randomization (level 2) |
-| Restricted info | dmesg + kernel pointers restricted |
+| Restricted info | dmesg + kernel pointers restricted, SysRq disabled |
+| Ptrace restriction | `yama.ptrace_scope = 1` |
+| Core dumps | Disabled (`suid_dumpable = 0` + `limits.d`) |
+| /tmp hardening | Mounted with `noexec,nosuid,nodev` |
+| USB storage | Disabled via modprobe |
 
 </details>
 
@@ -136,7 +142,8 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Feature | Details |
 |---------|---------|
 | Password policy | 12+ chars, mixed case, numbers, symbols |
-| Audit logging | sudo, auth, SSH, user/group changes |
+| Audit logging | sudo, auth, SSH, sudoers, kernel modules, time changes, file deletions, immutable config (`-e 2`) |
+| AIDE | File integrity monitoring (daily check at 04:00) |
 | AppArmor | Mandatory access control |
 | Auto-updates | Daily security patches |
 | Log retention | Configurable: 90d / 365d / 2y / custom (journald, auditd, logrotate, Docker) |
@@ -151,6 +158,10 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Official install | APT repo with GPG, not `curl \| sh` |
 | Docker Swarm | Initialized automatically (required for Traefik/Dokploy) |
 | Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
+| Content Trust | `DOCKER_CONTENT_TRUST=1` — image signature verification |
+| No privilege escalation | `no-new-privileges` in daemon.json |
+| Live restore | Containers survive daemon restarts |
+| DOCKER-USER firewall | Restricted to Docker bridge + overlay subnets only (not entire /12 and /8) |
 
 </details>
 
@@ -161,7 +172,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 |---------|---------|
 | Error trap | Restores SSH access on port 22 if setup fails |
 | Config backup | `sshd_config.bak` saved before changes |
-| Summary file | `~/.vps_setup_summary` with all details |
+| Summary file | `~/.vps_setup_summary` with all details (chmod 600) |
 | Double confirmation | `CONFIRM` required before closing port 22 |
 | No lockout | Password auth stays on until SSH key is verified |
 | Log | Full log saved to `/var/log/vps_setup.log` |
