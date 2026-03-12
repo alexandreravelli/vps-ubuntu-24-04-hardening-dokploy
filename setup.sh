@@ -593,17 +593,9 @@ CURRENT_STEP=5
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install security tools (~1-2 min)"
 SETUP_PHASE="security-tools"
 
-run_with_spinner "Installing UFW, Fail2Ban, auditd, pwquality, AIDE" sudo apt-get install -y -qq ufw fail2ban unattended-upgrades libpam-pwquality auditd aide
+run_with_spinner "Installing UFW, Fail2Ban, auditd, pwquality" sudo apt-get install -y -qq ufw fail2ban unattended-upgrades libpam-pwquality auditd
 log "Security tools installed"
 
-# Initialize AIDE database (file integrity monitoring)
-run_with_log "Initializing AIDE database" sudo aideinit
-if [ -f /var/lib/aide/aide.db.new ]; then
-    sudo cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db
-fi
-# Daily AIDE check via cron
-echo '0 4 * * * root /usr/bin/aide --check --config /etc/aide/aide.conf' | sudo tee /etc/cron.d/aide-check > /dev/null
-log "AIDE file integrity monitoring initialized (daily check at 04:00)"
 
 # === LOG RETENTION POLICY ===
 input_banner "Choose a log retention policy for your server"

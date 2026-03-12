@@ -287,26 +287,6 @@ else
     warn_check "USB storage not disabled via modprobe"
 fi
 
-# === AIDE ===
-section "File Integrity (AIDE)"
-
-if command -v aide &>/dev/null; then
-    pass "AIDE installed"
-else
-    fail "AIDE NOT installed"
-fi
-
-if [ -f /var/lib/aide/aide.db ]; then
-    pass "AIDE database initialized"
-else
-    fail "AIDE database not found"
-fi
-
-if crontab -l 2>/dev/null | grep -q "aide" || [ -f /etc/cron.daily/aide ] || (ls /etc/cron.d/ 2>/dev/null | grep -q aide); then
-    pass "AIDE scheduled check configured"
-else
-    warn_check "No AIDE cron job found"
-fi
 
 # === APPARMOR ===
 section "AppArmor"
