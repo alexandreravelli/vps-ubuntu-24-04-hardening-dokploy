@@ -171,15 +171,16 @@ echo ""
 gum style --bold --foreground 6 "  WHAT IT DOES"
 gum style --foreground 240 "  ────────────────────────────────────────────────"
 echo ""
-printf "  $(gum style --bold --foreground 6 '1')  Create admin user + strong password policy\n"
-printf "  $(gum style --bold --foreground 6 '2')  Configure SSH key (ed25519 + passphrase)\n"
-printf "  $(gum style --bold --foreground 6 '3')  Update system, auto-sized swap, DNS-over-TLS\n"
-printf "  $(gum style --bold --foreground 6 '4')  Kernel hardening: anti-spoofing, ASLR, SYN\n"
-printf "  $(gum style --bold --foreground 6 '5')  Install UFW · Fail2Ban · AppArmor · auditd · log retention\n"
-printf "  $(gum style --bold --foreground 6 '6')  Firewall: deny-by-default, allow 80/443/3000\n"
-printf "  $(gum style --bold --foreground 6 '7')  SSH: random port 50000-60000, key-only auth\n"
-printf "  $(gum style --bold --foreground 6 '8')  Docker: official APT repo + GPG + Swarm + DOCKER-USER firewall\n"
-printf "  $(gum style --bold --foreground 6 '9')  Dokploy: self-hosted PaaS at port 3000\n"
+printf "  $(gum style --foreground 240 '1')  Create admin user + strong password policy\n"
+printf "  $(gum style --foreground 240 '2')  Configure SSH key (ed25519 + passphrase)\n"
+printf "  $(gum style --foreground 240 '3')  Update system, auto-sized swap, DNS-over-TLS\n"
+printf "  $(gum style --foreground 240 '4')  Kernel hardening: anti-spoofing, ASLR, SYN\n"
+printf "  $(gum style --foreground 240 '5')  Install UFW · Fail2Ban · AppArmor · auditd · log retention\n"
+printf "  $(gum style --foreground 240 '6')  Firewall: deny-by-default, allow 80/443/3000\n"
+echo ""
+printf "  $(gum style --foreground 240 '7')  SSH: random port 50000-60000, key-only auth\n"
+printf "  $(gum style --foreground 240 '8')  Docker: official APT repo + GPG + Swarm + DOCKER-USER firewall\n"
+printf "  $(gum style --foreground 240 '9')  Dokploy: self-hosted PaaS at port 3000\n"
 echo ""
 
 # Prerequisites section
@@ -188,7 +189,7 @@ gum style --foreground 240 "  ────────────────�
 echo ""
 printf "  $(gum style --foreground 2 '✓')  Fresh Ubuntu 24.04 LTS VPS\n"
 printf "  $(gum style --foreground 2 '✓')  User with sudo privileges\n"
-printf "  $(gum style --foreground 2 '✓')  SSH public key (ed25519) -- or generate one\n"
+printf "  $(gum style --foreground 2 '✓')  SSH public key (ed25519) — or generate one\n"
 echo ""
 
 # Server specs section
@@ -201,8 +202,8 @@ SPEC_OS=$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || echo "Unknown"
 SPEC_KERNEL=$(uname -r)
 SPEC_CPU=$(nproc 2>/dev/null || echo "?")
 SPEC_RAM=$(free -m 2>/dev/null | awk '/^Mem:/{printf "%.1f GB", $2/1024}' || echo "?")
-SPEC_DISK_TOTAL=$(df -h / 2>/dev/null | awk 'NR==2{print $2}' || echo "?")
-SPEC_DISK_FREE=$(df -h / 2>/dev/null | awk 'NR==2{print $4}' || echo "?")
+SPEC_DISK_TOTAL=$(df -BG / 2>/dev/null | awk 'NR==2{printf "%d GB", $2}' || echo "?")
+SPEC_DISK_FREE=$(df -BG / 2>/dev/null | awk 'NR==2{printf "%d GB", $4}' || echo "?")
 SPEC_IPV4=$(curl -s --max-time 3 -4 ifconfig.me 2>/dev/null || echo "not available")
 SPEC_IPV6=$(curl -s --max-time 3 -6 ifconfig.me 2>/dev/null || echo "not available")
 
@@ -240,11 +241,11 @@ if [ "$HAS_CLOUD_FIREWALL" = true ]; then
         "⚠  EXTERNAL FIREWALL DETECTED" \
         "Open these ports in your provider's control panel BEFORE running:" \
         "" \
-        "  22          SSH (temporary -- closed after setup)" \
-        "  80          HTTP" \
-        "  443         HTTPS" \
-        "  3000        Dokploy (temporary -- close after SSL)" \
-        "  $SSH_PORT      SSH (randomly assigned for this install)"
+        "    22        SSH (temporary — closed after setup)" \
+        "    80        HTTP" \
+        "   443        HTTPS" \
+        "  3000        Dokploy (temporary — close after SSL)" \
+        "  $(printf '%5s' "$SSH_PORT")        SSH (custom port for this install)"
 else
     gum style \
         --border rounded \
@@ -255,10 +256,10 @@ else
         "⚠  EXTERNAL FIREWALL" \
         "If your provider has a network firewall, open these ports BEFORE running:" \
         "" \
-        "  22          SSH (temporary -- closed after setup)" \
-        "  80          HTTP" \
-        "  443         HTTPS" \
-        "  3000        Dokploy (temporary -- close after SSL)" \
+        "    22        SSH (temporary — closed after setup)" \
+        "    80        HTTP" \
+        "   443        HTTPS" \
+        "  3000        Dokploy (temporary — close after SSL)" \
         "" \
         "The final custom SSH port will be shown at the end."
 fi
