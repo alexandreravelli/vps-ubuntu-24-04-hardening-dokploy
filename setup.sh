@@ -241,11 +241,11 @@ if [ "$HAS_CLOUD_FIREWALL" = true ]; then
         "⚠  EXTERNAL FIREWALL DETECTED" \
         "Open these ports in your provider's control panel BEFORE running:" \
         "" \
-        "    22        SSH (temporary — closed after setup)" \
-        "    80        HTTP" \
-        "   443        HTTPS" \
-        "  3000        Dokploy (temporary — close after SSL)" \
-        "  $(printf '%5s' "$SSH_PORT")        SSH (custom port for this install)"
+        "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
+        "$(printf '  %5s        HTTP' '80')" \
+        "$(printf '  %5s        HTTPS' '443')" \
+        "$(printf '  %5s        Dokploy (temporary — close after SSL)' '3000')" \
+        "$(printf '  %5s        SSH (custom port for this install)' "$SSH_PORT")"
 else
     gum style \
         --border rounded \
@@ -256,10 +256,10 @@ else
         "⚠  EXTERNAL FIREWALL" \
         "If your provider has a network firewall, open these ports BEFORE running:" \
         "" \
-        "    22        SSH (temporary — closed after setup)" \
-        "    80        HTTP" \
-        "   443        HTTPS" \
-        "  3000        Dokploy (temporary — close after SSL)" \
+        "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
+        "$(printf '  %5s        HTTP' '80')" \
+        "$(printf '  %5s        HTTPS' '443')" \
+        "$(printf '  %5s        Dokploy (temporary — close after SSL)' '3000')" \
         "" \
         "The final custom SSH port will be shown at the end."
 fi
