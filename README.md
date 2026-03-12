@@ -160,8 +160,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
 | Content Trust | `DOCKER_CONTENT_TRUST=1` — image signature verification |
 | No privilege escalation | `no-new-privileges` in daemon.json |
-| Live restore | Containers survive daemon restarts |
-| DOCKER-USER firewall | Restricted to Docker bridge + overlay subnets only (not entire /12 and /8) |
+| DOCKER-USER firewall | deny-by-default, allow Docker bridge (172.16.0.0/12) + overlay (10.0.0.0/8) subnets |
 
 </details>
 

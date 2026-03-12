@@ -129,6 +129,30 @@ else
     pass "SSH socket disabled"
 fi
 
+if grep -q "Ciphers" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+    pass "SSH strong ciphers configured"
+else
+    warn_check "SSH ciphers not explicitly configured"
+fi
+
+if grep -q "MACs" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+    pass "SSH MACs configured"
+else
+    warn_check "SSH MACs not explicitly configured"
+fi
+
+if grep -q "PermitEmptyPasswords no" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+    pass "Empty passwords disabled"
+else
+    fail "Empty passwords NOT disabled"
+fi
+
+if grep -q "LogLevel VERBOSE" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+    pass "SSH LogLevel VERBOSE"
+else
+    warn_check "SSH LogLevel not set to VERBOSE"
+fi
+
 # === FIREWALL ===
 section "Firewall (UFW)"
 
@@ -225,6 +249,64 @@ check_sysctl "net.ipv6.conf.all.accept_source_route" "0" "IPv6 source routing di
 check_sysctl "kernel.randomize_va_space" "2" "ASLR full randomization"
 check_sysctl "kernel.dmesg_restrict" "1" "Dmesg restricted"
 check_sysctl "kernel.kptr_restrict" "2" "Kernel pointers restricted"
+check_sysctl "kernel.sysrq" "0" "SysRq disabled"
+check_sysctl "kernel.yama.ptrace_scope" "1" "Ptrace restricted"
+check_sysctl "net.ipv4.icmp_ignore_bogus_error_responses" "1" "Bogus ICMP errors ignored"
+check_sysctl "fs.suid_dumpable" "0" "Core dumps disabled (suid)"
+
+# === CORE DUMPS ===
+section "Core Dumps"
+
+if [ -f /etc/security/limits.d/no-core.conf ] && grep -q "hard core 0" /etc/security/limits.d/no-core.conf 2>/dev/null; then
+    pass "Core dumps disabled via limits.d"
+else
+    fail "Core dumps NOT disabled in limits.d"
+fi
+
+# === /tmp HARDENING ===
+section "/tmp Hardening"
+
+if mount | grep -q "/tmp.*noexec"; then
+    pass "/tmp mounted with noexec"
+else
+    warn_check "/tmp not mounted with noexec (may require reboot)"
+fi
+
+if grep -q "tmpfs.*/tmp.*noexec" /etc/fstab 2>/dev/null; then
+    pass "/tmp hardening in fstab (noexec,nosuid,nodev)"
+else
+    fail "/tmp hardening NOT in fstab"
+fi
+
+# === USB STORAGE ===
+section "USB Storage"
+
+if [ -f /etc/modprobe.d/no-usb-storage.conf ] && grep -q "install usb-storage /bin/true" /etc/modprobe.d/no-usb-storage.conf 2>/dev/null; then
+    pass "USB storage disabled"
+else
+    warn_check "USB storage not disabled via modprobe"
+fi
+
+# === AIDE ===
+section "File Integrity (AIDE)"
+
+if command -v aide &>/dev/null; then
+    pass "AIDE installed"
+else
+    fail "AIDE NOT installed"
+fi
+
+if [ -f /var/lib/aide/aide.db ]; then
+    pass "AIDE database initialized"
+else
+    fail "AIDE database not found"
+fi
+
+if crontab -l 2>/dev/null | grep -q "aide" || [ -f /etc/cron.daily/aide ] || (ls /etc/cron.d/ 2>/dev/null | grep -q aide); then
+    pass "AIDE scheduled check configured"
+else
+    warn_check "No AIDE cron job found"
+fi
 
 # === APPARMOR ===
 section "AppArmor"
@@ -396,6 +478,18 @@ if command -v docker &>/dev/null; then
         pass "Docker Swarm active (required for Traefik)"
     else
         fail "Docker Swarm NOT active -- Traefik cannot start (run: docker swarm init)"
+    fi
+
+    if grep -q '"no-new-privileges": true' /etc/docker/daemon.json 2>/dev/null; then
+        pass "Docker no-new-privileges enabled"
+    else
+        fail "Docker no-new-privileges NOT enabled"
+    fi
+
+    if [ -f /etc/profile.d/docker-content-trust.sh ] && grep -q "DOCKER_CONTENT_TRUST=1" /etc/profile.d/docker-content-trust.sh 2>/dev/null; then
+        pass "Docker Content Trust enabled"
+    else
+        warn_check "Docker Content Trust not configured"
     fi
 else
     fail "Docker NOT installed"

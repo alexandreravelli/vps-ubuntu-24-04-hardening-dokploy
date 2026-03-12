@@ -914,8 +914,7 @@ sudo tee /etc/docker/daemon.json > /dev/null << EOF
 {
   "log-driver": "json-file",
   "log-opts": {"max-size": "10m", "max-file": "$DOCKER_MAX_FILE"},
-  "no-new-privileges": true,
-  "live-restore": true
+  "no-new-privileges": true
 }
 EOF
 sudo systemctl restart docker
@@ -951,11 +950,9 @@ for cmd in iptables ip6tables; do
     $cmd -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
     $cmd -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
     $cmd -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    # Allow only Docker default bridge + overlay subnets (not entire /12 and /8)
-    $cmd -I DOCKER-USER -s 172.17.0.0/16 -j ACCEPT
-    $cmd -I DOCKER-USER -s 172.18.0.0/16 -j ACCEPT
-    $cmd -I DOCKER-USER -s 10.0.0.0/24 -j ACCEPT
-    $cmd -I DOCKER-USER -s 10.0.1.0/24 -j ACCEPT
+    # Allow Docker bridge networks (172.16.0.0/12) + overlay/Swarm networks (10.0.0.0/8)
+    $cmd -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
+    $cmd -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
     $cmd -I DOCKER-USER -i lo -j ACCEPT
 done
 FWSCRIPT
