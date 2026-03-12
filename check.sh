@@ -332,6 +332,44 @@ else
     warn_check "Timezone: $CURRENT_TZ (expected UTC)"
 fi
 
+# === LOG RETENTION ===
+section "Log Retention"
+
+if [ -f /etc/systemd/journald.conf.d/retention.conf ]; then
+    if grep -q "MaxRetentionSec" /etc/systemd/journald.conf.d/retention.conf; then
+        RETENTION_VAL=$(grep "MaxRetentionSec" /etc/systemd/journald.conf.d/retention.conf | cut -d= -f2)
+        pass "journald retention configured ($RETENTION_VAL)"
+    else
+        fail "journald retention config exists but MaxRetentionSec not set"
+    fi
+else
+    fail "journald retention config not found"
+fi
+
+if grep -q "max_log_file_action = ROTATE" /etc/audit/auditd.conf 2>/dev/null; then
+    pass "auditd log rotation enabled"
+else
+    fail "auditd max_log_file_action is not ROTATE"
+fi
+
+if [ -f /etc/logrotate.d/ufw-custom ]; then
+    pass "Custom logrotate config for UFW"
+else
+    warn_check "Custom logrotate config for UFW not found"
+fi
+
+if [ -f /etc/logrotate.d/fail2ban-custom ]; then
+    pass "Custom logrotate config for Fail2Ban"
+else
+    warn_check "Custom logrotate config for Fail2Ban not found"
+fi
+
+if [ -f /etc/logrotate.d/rsyslog-custom ]; then
+    pass "Custom logrotate config for syslog/auth.log"
+else
+    warn_check "Custom logrotate config for syslog/auth.log not found"
+fi
+
 # === DOCKER ===
 section "Docker"
 

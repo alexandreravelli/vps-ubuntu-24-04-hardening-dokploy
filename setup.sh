@@ -175,7 +175,7 @@ printf "  $(gum style --bold --foreground 6 '1')  Create admin user + strong pas
 printf "  $(gum style --bold --foreground 6 '2')  Configure SSH key (ed25519 + passphrase)\n"
 printf "  $(gum style --bold --foreground 6 '3')  Update system, auto-sized swap, DNS-over-TLS\n"
 printf "  $(gum style --bold --foreground 6 '4')  Kernel hardening: anti-spoofing, ASLR, SYN\n"
-printf "  $(gum style --bold --foreground 6 '5')  Install UFW · Fail2Ban · AppArmor · auditd\n"
+printf "  $(gum style --bold --foreground 6 '5')  Install UFW · Fail2Ban · AppArmor · auditd · log retention\n"
 printf "  $(gum style --bold --foreground 6 '6')  Firewall: deny-by-default, allow 80/443/3000\n"
 printf "  $(gum style --bold --foreground 6 '7')  SSH: random port 50000-60000, key-only auth\n"
 printf "  $(gum style --bold --foreground 6 '8')  Docker: official APT repo + GPG + Swarm + DOCKER-USER firewall\n"
@@ -191,17 +191,85 @@ printf "  $(gum style --foreground 2 '✓')  User with sudo privileges\n"
 printf "  $(gum style --foreground 2 '✓')  SSH public key (ed25519) -- or generate one\n"
 echo ""
 
+# Server specs section
+gum style --bold --foreground 6 "  SERVER SPECS"
+gum style --foreground 240 "  ────────────────────────────────────────────────"
+echo ""
+
+# Gather server info
+SPEC_OS=$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || echo "Unknown")
+SPEC_KERNEL=$(uname -r)
+SPEC_CPU=$(nproc 2>/dev/null || echo "?")
+SPEC_RAM=$(free -h 2>/dev/null | awk '/^Mem:/{print $2}' || echo "?")
+SPEC_DISK_TOTAL=$(df -h / 2>/dev/null | awk 'NR==2{print $2}' || echo "?")
+SPEC_DISK_FREE=$(df -h / 2>/dev/null | awk 'NR==2{print $4}' || echo "?")
+SPEC_IPV4=$(curl -s --max-time 3 -4 ifconfig.me 2>/dev/null || echo "not available")
+SPEC_IPV6=$(curl -s --max-time 3 -6 ifconfig.me 2>/dev/null || echo "not available")
+
+printf "  %-12s %s\n" "OS" "$SPEC_OS"
+printf "  %-12s %s\n" "Kernel" "$SPEC_KERNEL"
+printf "  %-12s %s vCPU\n" "CPU" "$SPEC_CPU"
+printf "  %-12s %s\n" "RAM" "$SPEC_RAM"
+printf "  %-12s %s total / %s free\n" "Disk" "$SPEC_DISK_TOTAL" "$SPEC_DISK_FREE"
+printf "  %-12s %s\n" "IPv4" "$SPEC_IPV4"
+printf "  %-12s %s\n" "IPv6" "$SPEC_IPV6"
+printf "  %-12s %s (randomly assigned)\n" "SSH port" "$SSH_PORT"
+echo ""
+
+# Port status
+gum style --bold --foreground 6 "  PORT STATUS"
+gum style --foreground 240 "  ────────────────────────────────────────────────"
+echo ""
+for CHECK_PORT in 22 80 443; do
+    if ss -tlnp 2>/dev/null | grep -q ":${CHECK_PORT} "; then
+        printf "  %-12s \033[0;32mLISTENING\033[0m\n" "Port $CHECK_PORT"
+    else
+        printf "  %-12s \033[0;90mclosed\033[0m\n" "Port $CHECK_PORT"
+    fi
+done
+printf "  %-12s \033[0;33mwill be opened\033[0m\n" "Port $SSH_PORT"
+echo ""
+
+# Cloud provider detection
+CLOUD_PROVIDER=""
+if curl -s --max-time 2 -H "Metadata-Flavor: Google" http://169.254.169.254/computeMetadata/v1/ &>/dev/null; then
+    CLOUD_PROVIDER="GCP"
+elif curl -s --max-time 2 http://169.254.169.254/latest/meta-data/ &>/dev/null; then
+    CLOUD_PROVIDER="AWS"
+elif curl -s --max-time 2 http://169.254.169.254/hetzner/v1/metadata &>/dev/null; then
+    CLOUD_PROVIDER="Hetzner"
+elif curl -s --max-time 2 http://169.254.169.254/openstack/latest/ &>/dev/null; then
+    CLOUD_PROVIDER="OVH"
+elif grep -qi "digitalocean" /sys/class/dmi/id/board_vendor 2>/dev/null; then
+    CLOUD_PROVIDER="DigitalOcean"
+elif grep -qi "vultr" /sys/class/dmi/id/board_vendor 2>/dev/null; then
+    CLOUD_PROVIDER="Vultr"
+fi
+
 # Firewall warning box
-gum style \
-    --border rounded \
-    --border-foreground 3 \
-    --foreground 3 \
-    --padding "0 2" \
-    --margin "0 2" \
-    "⚠  EXTERNAL FIREWALL (OVH, Hetzner, AWS...)" \
-    "Open these ports BEFORE running the script:" \
-    "22  ·  80  ·  443  ·  3000 (Dokploy)" \
-    "The final custom SSH port will be shown at the end."
+if [ -n "$CLOUD_PROVIDER" ]; then
+    gum style \
+        --border rounded \
+        --border-foreground 3 \
+        --foreground 3 \
+        --padding "0 2" \
+        --margin "0 2" \
+        "⚠  EXTERNAL FIREWALL ($CLOUD_PROVIDER detected)" \
+        "Open these ports in your $CLOUD_PROVIDER control panel BEFORE running:" \
+        "22  ·  80  ·  443  ·  3000 (Dokploy)  ·  $SSH_PORT (SSH)" \
+        "SSH port $SSH_PORT has been randomly assigned for this install."
+else
+    gum style \
+        --border rounded \
+        --border-foreground 3 \
+        --foreground 3 \
+        --padding "0 2" \
+        --margin "0 2" \
+        "⚠  EXTERNAL FIREWALL (OVH, Hetzner, AWS...)" \
+        "Open these ports BEFORE running the script:" \
+        "22  ·  80  ·  443  ·  3000 (Dokploy)" \
+        "The final custom SSH port will be shown at the end."
+fi
 
 echo ""
 
@@ -507,6 +575,110 @@ SETUP_PHASE="security-tools"
 run_with_spinner "Installing UFW, Fail2Ban, auditd, pwquality" sudo apt-get install -y -qq ufw fail2ban unattended-upgrades libpam-pwquality auditd
 log "Security tools installed"
 
+# === LOG RETENTION POLICY ===
+input_banner "Choose a log retention policy for your server"
+printf "  \033[0;90mAffected logs: auditd, journald, Fail2Ban, UFW, syslog, auth.log, Docker\033[0m\n"
+echo ""
+
+LOG_RETENTION_CHOICE=$(gum choose \
+    "Standard (90 days)" \
+    "Extended (365 days)" \
+    "Compliance (2 years)" \
+    "Custom")
+
+case "$LOG_RETENTION_CHOICE" in
+    "Standard (90 days)")
+        LOG_DAYS=90
+        ;;
+    "Extended (365 days)")
+        LOG_DAYS=365
+        ;;
+    "Compliance (2 years)")
+        LOG_DAYS=730
+        ;;
+    "Custom")
+        input_banner "Enter custom retention period in days"
+        LOG_DAYS=$(gum input --placeholder "Number of days (e.g. 180)" --prompt "> " --prompt.foreground 6)
+        if ! echo "$LOG_DAYS" | grep -qE '^[0-9]+$' || [ "$LOG_DAYS" -lt 1 ]; then
+            warn "Invalid number -- defaulting to 90 days"
+            LOG_DAYS=90
+        fi
+        ;;
+esac
+
+# Convert days to weeks for logrotate
+LOG_WEEKS=$(( LOG_DAYS / 7 ))
+[ "$LOG_WEEKS" -lt 1 ] && LOG_WEEKS=1
+
+# journald retention
+sudo mkdir -p /etc/systemd/journald.conf.d
+sudo tee /etc/systemd/journald.conf.d/retention.conf > /dev/null << EOF
+[Journal]
+MaxRetentionSec=${LOG_DAYS}d
+SystemMaxUse=500M
+EOF
+sudo systemctl restart systemd-journald
+log "journald retention set to ${LOG_DAYS} days"
+
+# auditd retention: scale num_logs based on retention
+AUDIT_NUM_LOGS=$(( LOG_DAYS / 7 ))
+[ "$AUDIT_NUM_LOGS" -lt 5 ] && AUDIT_NUM_LOGS=5
+[ "$AUDIT_NUM_LOGS" -gt 99 ] && AUDIT_NUM_LOGS=99
+sudo sed -i "s/^num_logs.*/num_logs = $AUDIT_NUM_LOGS/" /etc/audit/auditd.conf
+sudo sed -i "s/^max_log_file_action.*/max_log_file_action = ROTATE/" /etc/audit/auditd.conf
+log "auditd retention configured ($AUDIT_NUM_LOGS rotated log files)"
+
+# logrotate: UFW
+sudo tee /etc/logrotate.d/ufw-custom > /dev/null << EOF
+/var/log/ufw.log {
+    weekly
+    rotate $LOG_WEEKS
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 syslog adm
+}
+EOF
+
+# logrotate: rsyslog (syslog + auth.log)
+sudo tee /etc/logrotate.d/rsyslog-custom > /dev/null << EOF
+/var/log/syslog
+/var/log/auth.log {
+    weekly
+    rotate $LOG_WEEKS
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 syslog adm
+    sharedscripts
+    postrotate
+        /usr/lib/rsyslog/rsyslog-rotate 2>/dev/null || true
+    endscript
+}
+EOF
+
+# logrotate: Fail2Ban
+sudo tee /etc/logrotate.d/fail2ban-custom > /dev/null << EOF
+/var/log/fail2ban.log {
+    weekly
+    rotate $LOG_WEEKS
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root adm
+    postrotate
+        fail2ban-client flushlogs >/dev/null 2>&1 || true
+    endscript
+}
+EOF
+
+# Save retention to config
+echo "LOG_RETENTION_DAYS=$LOG_DAYS" | sudo tee -a "$CONFIG_FILE" > /dev/null
+log "Log retention policy configured (${LOG_DAYS} days)"
+
 sudo tee /etc/security/pwquality.conf > /dev/null << EOF
 minlen = 12
 dcredit = -1
@@ -665,10 +837,18 @@ sudo usermod -aG docker "$NEW_USER"
 log "Docker installed (official APT repo with GPG)"
 
 sudo mkdir -p /etc/docker
+# Scale Docker log files to retention policy
+if [ "$LOG_DAYS" -le 90 ]; then
+    DOCKER_MAX_FILE=3
+elif [ "$LOG_DAYS" -le 365 ]; then
+    DOCKER_MAX_FILE=7
+else
+    DOCKER_MAX_FILE=14
+fi
 sudo tee /etc/docker/daemon.json > /dev/null << EOF
 {
   "log-driver": "json-file",
-  "log-opts": {"max-size": "10m", "max-file": "3"}
+  "log-opts": {"max-size": "10m", "max-file": "$DOCKER_MAX_FILE"}
 }
 EOF
 sudo systemctl restart docker
@@ -951,6 +1131,7 @@ USER=$NEW_USER
 SSH_PORT=$SSH_PORT
 DOKPLOY_URL=http://$PUBLIC_IP:3000
 SSH_CMD=ssh $NEW_USER@$SSH_HOST -p $SSH_PORT
+LOG_RETENTION=${LOG_DAYS}_days
 LOG_FILE=$LOG_FILE
 EOF
 sudo chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.vps_setup_summary"
@@ -976,6 +1157,7 @@ gum style --bold --foreground 2 "  CONNECT"
 gum style --foreground 240 "  ──────────────────────────────────────────────────"
 printf "  $(gum style --bold 'SSH')      ssh %s@%s -p %s\n" "$NEW_USER" "$SSH_HOST" "$SSH_PORT"
 printf "  $(gum style --bold 'Dokploy')  http://%s:3000\n" "$PUBLIC_IP"
+printf "  $(gum style --bold 'Log ret.') %s days\n" "$LOG_DAYS"
 printf "  $(gum style --bold 'Log')      %s\n" "$LOG_FILE"
 echo ""
 gum style --bold --foreground 2 "  NEXT STEPS"

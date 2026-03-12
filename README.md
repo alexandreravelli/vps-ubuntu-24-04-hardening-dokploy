@@ -75,7 +75,7 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 2 | **SSH Key** | Paste existing key or generate ed25519 with optional passphrase | ~10s |
 | 3 | **System** | apt upgrade, auto-sized swap (2GB ≤4GB RAM / 4GB ≤16GB / skipped >16GB), Quad9 DNS-over-TLS + DNSSEC, UTC timezone | ~2-3min |
 | 4 | **Kernel** | sysctl: anti-spoofing, SYN flood protection, ASLR, dmesg restrict | ~5s |
-| 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades | ~1-2min |
+| 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades, log retention policy | ~1-2min |
 | 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 + 3000 | ~5s |
 | 7 | **SSH** | Random port 50000-60000, key-only auth, no root login | ~5s |
 | 8 | **Docker** | Official APT repo + GPG + Docker Swarm + `docker-firewall.service` (DOCKER-USER deny-by-default, persisted across Docker restarts) | ~2-3min |
@@ -139,6 +139,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Audit logging | sudo, auth, SSH, user/group changes |
 | AppArmor | Mandatory access control |
 | Auto-updates | Daily security patches |
+| Log retention | Configurable: 90d / 365d / 2y / custom (journald, auditd, logrotate, Docker) |
 
 </details>
 
@@ -149,7 +150,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 |---------|---------|
 | Official install | APT repo with GPG, not `curl \| sh` |
 | Docker Swarm | Initialized automatically (required for Traefik/Dokploy) |
-| Log rotation | 10MB max, 3 files |
+| Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
 
 </details>
 
