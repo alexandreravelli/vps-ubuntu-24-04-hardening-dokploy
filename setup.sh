@@ -984,37 +984,42 @@ CURRENT_STEP=9
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~2-5 min)"
 SETUP_PHASE="dokploy"
 
-# Save iptables rules before Dokploy (its install may flush all rules and kill SSH)
-sudo iptables-save 2>/dev/null | sudo tee /tmp/iptables-pre-dokploy.v4 > /dev/null || true
-sudo ip6tables-save 2>/dev/null | sudo tee /tmp/iptables-pre-dokploy.v6 > /dev/null || true
+# Prevent Dokploy from removing UFW during install.
+# Dokploy installs iptables-persistent which conflicts with UFW and triggers its removal,
+# flushing all iptables rules and killing the SSH session.
+# Hold UFW so apt cannot remove it, and add raw iptables ACCEPT rules as a safety net.
+sudo apt-mark hold ufw > /dev/null 2>&1 || true
+# Raw iptables safety net: even if UFW rules get flushed, SSH stays alive
+sudo iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+sudo iptables -I INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
+sudo ip6tables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+sudo ip6tables -I INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
 
 run_with_log "Installing Dokploy" bash -c 'timeout 900 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
 
-# Restore iptables if Dokploy's install flushed them (prevents SSH lockout)
-if ! sudo iptables -L INPUT -n 2>/dev/null | grep -q "dpt:22"; then
-    sudo iptables-restore < /tmp/iptables-pre-dokploy.v4 2>/dev/null || true
-    sudo ip6tables-restore < /tmp/iptables-pre-dokploy.v6 2>/dev/null || true
-    log "Restored iptables rules after Dokploy install"
-fi
-rm -f /tmp/iptables-pre-dokploy.v4 /tmp/iptables-pre-dokploy.v6
+# Unhold UFW and clean up raw rules (UFW manages them now)
+sudo apt-mark unhold ufw > /dev/null 2>&1 || true
+sudo iptables -D INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+sudo iptables -D INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
+sudo ip6tables -D INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+sudo ip6tables -D INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
 
-# Dokploy install script removes UFW (conflicts with iptables-persistent which Dokploy uses).
-# Reinstall UFW and re-apply rules. netfilter-persistent is NOT reinstalled -- we use the
-# docker-firewall systemd service instead (avoids the ufw/iptables-persistent conflict).
+# If Dokploy managed to remove UFW despite the hold, reinstall it
 if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
     run_with_spinner "Reinstalling UFW (removed by Dokploy)" sudo apt-get install -y -qq ufw
-    sudo ufw --force reset > /dev/null
-    sudo ufw default deny incoming > /dev/null
-    sudo ufw default allow outgoing > /dev/null
-    sudo ufw allow 22/tcp > /dev/null
-    sudo ufw allow "$SSH_PORT/tcp" > /dev/null
-    sudo ufw allow 80/tcp > /dev/null
-    sudo ufw allow 443/tcp > /dev/null
-    sudo ufw allow 3000/tcp > /dev/null
-    sudo ufw --force enable > /dev/null
-    log "UFW reinstalled and reconfigured after Dokploy (port 22 kept open until CONFIRM)"
 fi
+# Re-apply UFW rules (Dokploy may have reset them even if UFW wasn't removed)
+sudo ufw --force reset > /dev/null
+sudo ufw default deny incoming > /dev/null
+sudo ufw default allow outgoing > /dev/null
+sudo ufw allow 22/tcp > /dev/null
+sudo ufw allow "$SSH_PORT/tcp" > /dev/null
+sudo ufw allow 80/tcp > /dev/null
+sudo ufw allow 443/tcp > /dev/null
+sudo ufw allow 3000/tcp > /dev/null
+sudo ufw --force enable > /dev/null
+log "UFW rules reconfigured after Dokploy (port 22 kept open until CONFIRM)"
 
 # Re-apply needrestart SSH protection (Dokploy install may have altered it)
 sudo mkdir -p /etc/needrestart/conf.d
