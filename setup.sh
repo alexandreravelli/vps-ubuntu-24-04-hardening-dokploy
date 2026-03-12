@@ -556,17 +556,54 @@ kernel.dmesg_restrict = 1
 
 # Restrict kernel pointer access
 kernel.kptr_restrict = 2
+
+# Disable SysRq key
+kernel.sysrq = 0
+
+# Restrict ptrace
+kernel.yama.ptrace_scope = 1
+
+# Ignore bogus ICMP error responses
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+
+# Restrict core dumps from setuid programs
+fs.suid_dumpable = 0
 EOF
 run_with_spinner "Applying kernel parameters" sudo sysctl --system
 log "Kernel hardening applied"
+
+# Core dump restriction
+echo '* hard core 0' | sudo tee /etc/security/limits.d/core.conf > /dev/null
+log "Core dumps restricted"
+
+# /tmp hardening (noexec,nosuid,nodev) via tmpfs
+if ! mount | grep -q '/tmp.*noexec'; then
+    if ! grep -q '/tmp' /etc/fstab; then
+        echo 'tmpfs /tmp tmpfs defaults,noexec,nosuid,nodev,size=512M 0 0' | sudo tee -a /etc/fstab > /dev/null
+        log "/tmp hardening added to fstab (applied on next reboot)"
+    fi
+fi
+
+# Disable USB mass storage (headless VPS)
+echo 'install usb-storage /bin/true' | sudo tee /etc/modprobe.d/disable-usb-storage.conf > /dev/null
+log "USB mass storage disabled"
 
 # === STEP 5: INSTALL SECURITY TOOLS ===
 CURRENT_STEP=5
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install security tools (~1-2 min)"
 SETUP_PHASE="security-tools"
 
-run_with_spinner "Installing UFW, Fail2Ban, auditd, pwquality" sudo apt-get install -y -qq ufw fail2ban unattended-upgrades libpam-pwquality auditd
+run_with_spinner "Installing UFW, Fail2Ban, auditd, pwquality, AIDE" sudo apt-get install -y -qq ufw fail2ban unattended-upgrades libpam-pwquality auditd aide
 log "Security tools installed"
+
+# Initialize AIDE database (file integrity monitoring)
+run_with_log "Initializing AIDE database" sudo aideinit
+if [ -f /var/lib/aide/aide.db.new ]; then
+    sudo cp /var/lib/aide/aide.db.new /var/lib/aide/aide.db
+fi
+# Daily AIDE check via cron
+echo '0 4 * * * root /usr/bin/aide --check --config /etc/aide/aide.conf' | sudo tee /etc/cron.d/aide-check > /dev/null
+log "AIDE file integrity monitoring initialized (daily check at 04:00)"
 
 # === LOG RETENTION POLICY ===
 input_banner "Choose a log retention policy for your server"
@@ -684,14 +721,35 @@ EOF
 log "Strong password policy configured"
 
 sudo tee /etc/audit/rules.d/hardening.rules > /dev/null << EOF
+# Privileged commands
 -a always,exit -F arch=b64 -S execve -F euid=0 -k sudo_commands
+
+# Identity and authentication
 -w /var/log/auth.log -p wa -k auth_log
--w /etc/ssh/sshd_config -p wa -k sshd_config
+-w /var/log/lastlog -p wa -k login_events
 -w /etc/passwd -p wa -k passwd_changes
 -w /etc/shadow -p wa -k shadow_changes
 -w /etc/group -p wa -k group_changes
+-w /etc/sudoers -p wa -k sudoers_changes
+-w /etc/sudoers.d/ -p wa -k sudoers_changes
+
+# SSH and network
+-w /etc/ssh/sshd_config -p wa -k sshd_config
 -w /etc/hosts -p wa -k hosts_changes
 -w /etc/network -p wa -k network_changes
+
+# Kernel modules
+-a always,exit -F arch=b64 -S init_module -S delete_module -k modules
+
+# Time changes
+-a always,exit -F arch=b64 -S adjtimex -S settimeofday -k time_change
+-a always,exit -F arch=b64 -S clock_settime -k time_change
+
+# File deletions by users
+-a always,exit -F arch=b64 -S unlink -S rename -S unlinkat -S renameat -F auid>=1000 -F auid!=4294967295 -k delete
+
+# Make audit config immutable until reboot
+-e 2
 EOF
 sudo systemctl restart auditd
 log "Audit logging configured"
@@ -731,7 +789,7 @@ sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
 enabled = true
 port = 22,$SSH_PORT
 filter = sshd
-logpath = /var/log/auth.log
+backend = systemd
 maxretry = 3
 bantime = 3600
 findtime = 600
@@ -786,12 +844,24 @@ Port $SSH_PORT
 PermitRootLogin no
 PasswordAuthentication yes
 PubkeyAuthentication yes
+PermitEmptyPasswords no
+KbdInteractiveAuthentication no
+PermitUserEnvironment no
+HostbasedAuthentication no
+AllowAgentForwarding no
 MaxAuthTries 3
+MaxSessions 2
 LoginGraceTime 30
 X11Forwarding no
 AllowTcpForwarding no
 ClientAliveInterval 300
 ClientAliveCountMax 2
+LogLevel VERBOSE
+
+# Strong cipher suite (Mozilla Modern)
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
 EOF
 
 # Validate config
@@ -827,7 +897,9 @@ echo \
 run_with_spinner "Updating Docker repository" sudo apt-get update -qq
 run_with_log "Installing Docker Engine" sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker "$NEW_USER"
-log "Docker installed (official APT repo with GPG)"
+# Enable Docker Content Trust (image signature verification)
+echo 'export DOCKER_CONTENT_TRUST=1' | sudo tee /etc/profile.d/docker-content-trust.sh > /dev/null
+log "Docker installed (official APT repo with GPG, content trust enabled)"
 
 sudo mkdir -p /etc/docker
 # Scale Docker log files to retention policy
@@ -841,7 +913,9 @@ fi
 sudo tee /etc/docker/daemon.json > /dev/null << EOF
 {
   "log-driver": "json-file",
-  "log-opts": {"max-size": "10m", "max-file": "$DOCKER_MAX_FILE"}
+  "log-opts": {"max-size": "10m", "max-file": "$DOCKER_MAX_FILE"},
+  "no-new-privileges": true,
+  "live-restore": true
 }
 EOF
 sudo systemctl restart docker
@@ -877,12 +951,15 @@ for cmd in iptables ip6tables; do
     $cmd -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
     $cmd -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
     $cmd -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    $cmd -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
-    $cmd -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
+    # Allow only Docker default bridge + overlay subnets (not entire /12 and /8)
+    $cmd -I DOCKER-USER -s 172.17.0.0/16 -j ACCEPT
+    $cmd -I DOCKER-USER -s 172.18.0.0/16 -j ACCEPT
+    $cmd -I DOCKER-USER -s 10.0.0.0/24 -j ACCEPT
+    $cmd -I DOCKER-USER -s 10.0.1.0/24 -j ACCEPT
     $cmd -I DOCKER-USER -i lo -j ACCEPT
 done
 FWSCRIPT
-sudo chmod +x /usr/local/bin/docker-firewall.sh
+sudo chmod 750 /usr/local/bin/docker-firewall.sh
 
 sudo tee /etc/systemd/system/docker-firewall.service > /dev/null << 'FWSERVICE'
 [Unit]
@@ -957,7 +1034,7 @@ exit 1
 
 # === DOWNLOAD POST-INSTALL SCRIPTS ===
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
-USER_HOME=$(eval echo "~$NEW_USER")
+USER_HOME=$(getent passwd "$NEW_USER" | cut -d: -f6)
 for script in cleanup.sh check.sh; do
     if curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script" 2>/dev/null; then
         chmod +x "$USER_HOME/$script"
@@ -1017,13 +1094,25 @@ Port $SSH_PORT
 PermitRootLogin no
 PasswordAuthentication no
 PubkeyAuthentication yes
+PermitEmptyPasswords no
+KbdInteractiveAuthentication no
+PermitUserEnvironment no
+HostbasedAuthentication no
+AllowAgentForwarding no
 MaxAuthTries 3
+MaxSessions 2
 LoginGraceTime 30
 X11Forwarding no
 AllowTcpForwarding no
 ClientAliveInterval 300
 ClientAliveCountMax 2
+LogLevel VERBOSE
 AllowUsers $NEW_USER
+
+# Strong cipher suite (Mozilla Modern)
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
 EOF
         # Validate config
         sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
@@ -1041,7 +1130,7 @@ EOF
 enabled = true
 port = $SSH_PORT
 filter = sshd
-logpath = /var/log/auth.log
+backend = systemd
 maxretry = 3
 bantime = 3600
 findtime = 600
@@ -1128,6 +1217,7 @@ LOG_RETENTION=${LOG_DAYS}_days
 LOG_FILE=$LOG_FILE
 EOF
 sudo chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.vps_setup_summary"
+sudo chmod 600 "/home/$NEW_USER/.vps_setup_summary"
 
 # === FINAL SUMMARY ===
 echo ""

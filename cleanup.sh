@@ -38,6 +38,11 @@ fi
 
 [ -z "$TARGET_USER" ] && error "No user specified"
 [ "$CURRENT_USER" = "$TARGET_USER" ] && error "You are logged in as '$TARGET_USER'. Login with a different user first."
+# Protect system accounts (UID < 1000)
+if id "$TARGET_USER" &>/dev/null; then
+    TARGET_UID=$(id -u "$TARGET_USER")
+    [ "$TARGET_UID" -lt 1000 ] && error "Refusing to remove system account '$TARGET_USER' (UID $TARGET_UID)"
+fi
 ! id "$TARGET_USER" &>/dev/null && log "User '$TARGET_USER' doesn't exist (already removed)" && exit 0
 
 gum style --foreground 3 "  This will remove user '$TARGET_USER' and its home directory."
