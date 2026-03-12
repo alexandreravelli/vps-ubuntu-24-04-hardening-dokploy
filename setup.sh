@@ -1065,7 +1065,7 @@ exit 1
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
 USER_HOME=$(getent passwd "$NEW_USER" | cut -d: -f6)
 [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || error "Cannot find home directory for user '$NEW_USER'"
-for script in cleanup.sh check.sh; do
+for script in cleanup.sh check.sh purge.sh; do
     if curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script" 2>/dev/null; then
         chmod +x "$USER_HOME/$script"
         chown "$NEW_USER:$NEW_USER" "$USER_HOME/$script"
@@ -1073,7 +1073,7 @@ for script in cleanup.sh check.sh; do
         warn "Could not download $script -- download manually after setup"
     fi
 done
-log "Post-install scripts downloaded (cleanup.sh, check.sh)"
+log "Post-install scripts downloaded (cleanup.sh, check.sh, purge.sh)"
 
 # === TEST SSH CONNECTION ===
 progress_bar "$TOTAL_STEPS" "$TOTAL_STEPS" "All steps completed"
@@ -1297,8 +1297,9 @@ gum style --foreground 240 "  ────────────────�
 printf "  $(gum style --bold --foreground 6 '1')  Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
 printf "  $(gum style --bold --foreground 6 '2')  Run ./cleanup.sh  -- remove old default user\n"
 printf "  $(gum style --bold --foreground 6 '3')  Run ./check.sh    -- verify hardening\n"
-printf "  $(gum style --bold --foreground 6 '4')  Setup Dokploy at http://%s:3000\n" "$PUBLIC_IP"
-printf "  $(gum style --bold --foreground 6 '5')  After SSL, close port 3000:\n"
+printf "  $(gum style --bold --foreground 6 '4')  Run ./purge.sh    -- remove setup files from server\n"
+printf "  $(gum style --bold --foreground 6 '5')  Setup Dokploy at http://%s:3000\n" "$PUBLIC_IP"
+printf "  $(gum style --bold --foreground 6 '6')  After SSL, close port 3000:\n"
 printf "       sudo ufw delete allow 3000/tcp\n"
 printf "       sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT\n"
 printf "       sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true\n"

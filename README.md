@@ -245,6 +245,16 @@ sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 
 > If using an external firewall, also close port 3000 in your provider's control panel.
 
+### Clean up setup files
+
+Once everything is verified, remove the setup scripts from the server:
+
+```bash
+sudo ./purge.sh
+```
+
+> This deletes all script files (setup.sh, cleanup.sh, check.sh, purge.sh) from the server. Your config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`) is preserved.
+
 ### Best Practices
 
 - **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) — prevents containers across projects from communicating with each other.
@@ -258,6 +268,7 @@ sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 ├── setup.sh        # Main hardening script (interactive CLI)
 ├── cleanup.sh      # Remove the default user
 ├── check.sh        # Post-install security audit
+├── purge.sh        # Remove setup files from server
 └── LICENSE
 ```
 
