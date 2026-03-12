@@ -997,49 +997,19 @@ CURRENT_STEP=9
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~2-5 min)"
 SETUP_PHASE="dokploy"
 
-# Dokploy install is the most dangerous step: it installs iptables-persistent (which
-# conflicts with UFW, triggering its removal and flushing all iptables rules), restarts
-# Docker (flushing DOCKER-USER), and may restart network services. Any of these can
-# kill the SSH session.
-#
-# Defense layers:
-# 1. Hold UFW package so apt cannot remove it
-# 2. Raw iptables ACCEPT rules as safety net (survive UFW flush)
-# 3. Run install detached from terminal (nohup) so script survives if SSH drops
-# 4. Redirect output to log file during install (prevents SIGPIPE death)
-
+# Pre-install iptables-persistent BEFORE Dokploy so its installer finds it
+# already present and skips the install (which would otherwise flush all rules
+# and conflict with UFW, killing the SSH session).
+echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections
+echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections
+sudo apt-get install -y -qq iptables-persistent > /dev/null 2>&1
 sudo apt-mark hold ufw > /dev/null 2>&1 || true
-sudo iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
-sudo iptables -I INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
-sudo ip6tables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
-sudo ip6tables -I INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
+log "Pre-installed iptables-persistent (prevents Dokploy from flushing rules)"
 
-# Run Dokploy install detached from terminal — if SSH drops, install continues
-DOKPLOY_LOG="/tmp/dokploy-install.log"
-printf "  \033[1;34m>> Installing Dokploy (output in %s)\033[0m\n" "$DOKPLOY_LOG" 2>/dev/null || true
-nohup bash -c 'timeout 900 bash -c "curl -sSL https://dokploy.com/install.sh | sh"' > "$DOKPLOY_LOG" 2>&1 &
-DOKPLOY_PID=$!
-
-# Wait for install with a spinner (falls back to silent wait if TTY is lost)
-if tty -s 2>/dev/null; then
-    gum spin --spinner dot --title "Installing Dokploy (~2-5 min)..." -- bash -c "
-        while kill -0 $DOKPLOY_PID 2>/dev/null; do sleep 2; done
-    " 2>/dev/null || true
-fi
-wait "$DOKPLOY_PID" || {
-    cat "$DOKPLOY_LOG" >> "$LOG_FILE"
-    error "Dokploy install failed -- check $DOKPLOY_LOG"
-}
-cat "$DOKPLOY_LOG" >> "$LOG_FILE"
-rm -f "$DOKPLOY_LOG"
+run_with_spinner "Installing Dokploy (~2-5 min)" bash -c 'curl -sSL https://dokploy.com/install.sh | sh'
 log "Dokploy installed"
 
-# Clean up safety layers
 sudo apt-mark unhold ufw > /dev/null 2>&1 || true
-sudo iptables -D INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
-sudo iptables -D INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
-sudo ip6tables -D INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
-sudo ip6tables -D INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
 
 # If Dokploy managed to remove UFW despite the hold, reinstall it
 if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
