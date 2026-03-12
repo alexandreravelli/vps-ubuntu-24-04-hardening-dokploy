@@ -63,8 +63,9 @@ cleanup_on_error() {
     fi
 }
 trap cleanup_on_error EXIT
-# Ignore SIGHUP so the script continues if the SSH session drops (e.g., during Dokploy install)
-trap '' HUP
+# Ignore SIGHUP (SSH session drop) and SIGPIPE (writing to closed terminal fd)
+# so the script continues even if the connection is lost mid-install
+trap '' HUP PIPE
 
 # === INSTALL GUM ===
 if ! command -v gum &>/dev/null; then
@@ -79,6 +80,7 @@ fi
 # === UI FUNCTIONS ===
 
 progress_bar() {
+    tty -s 2>/dev/null || return 0
     local current=$1
     local total=$2
     local label="$3"
@@ -97,7 +99,12 @@ run_with_spinner() {
     local label="$1"
     shift
     sudo -v 2>/dev/null || true  # Refresh sudo token to prevent timeout during long operations
-    gum spin --spinner dot --title "$label" -- "$@"
+    if tty -s 2>/dev/null; then
+        gum spin --spinner dot --title "$label" -- "$@"
+    else
+        # No TTY (SSH dropped) -- run silently, log only
+        "$@" > /dev/null 2>&1
+    fi
 }
 
 run_with_log() {
@@ -125,18 +132,24 @@ run_with_log() {
 }
 
 log() {
-    gum style --foreground 2 "  [OK] $1"
-    echo ""
+    if tty -s 2>/dev/null; then
+        gum style --foreground 2 "  [OK] $1" 2>/dev/null || true
+        echo "" 2>/dev/null || true
+    fi
     echo "[OK] $(date +%H:%M:%S) $1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 warn() {
-    gum style --foreground 3 "  [!] $1"
+    if tty -s 2>/dev/null; then
+        gum style --foreground 3 "  [!] $1" 2>/dev/null || true
+    fi
     echo "[WARN] $(date +%H:%M:%S) $1" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 error() {
-    gum style --foreground 1 --bold "  [X] $1"
+    if tty -s 2>/dev/null; then
+        gum style --foreground 1 --bold "  [X] $1" 2>/dev/null || true
+    fi
     echo "[ERROR] $(date +%H:%M:%S) $1" >> "$LOG_FILE" 2>/dev/null || true
     exit 1
 }
@@ -984,21 +997,44 @@ CURRENT_STEP=9
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~2-5 min)"
 SETUP_PHASE="dokploy"
 
-# Prevent Dokploy from removing UFW during install.
-# Dokploy installs iptables-persistent which conflicts with UFW and triggers its removal,
-# flushing all iptables rules and killing the SSH session.
-# Hold UFW so apt cannot remove it, and add raw iptables ACCEPT rules as a safety net.
+# Dokploy install is the most dangerous step: it installs iptables-persistent (which
+# conflicts with UFW, triggering its removal and flushing all iptables rules), restarts
+# Docker (flushing DOCKER-USER), and may restart network services. Any of these can
+# kill the SSH session.
+#
+# Defense layers:
+# 1. Hold UFW package so apt cannot remove it
+# 2. Raw iptables ACCEPT rules as safety net (survive UFW flush)
+# 3. Run install detached from terminal (nohup) so script survives if SSH drops
+# 4. Redirect output to log file during install (prevents SIGPIPE death)
+
 sudo apt-mark hold ufw > /dev/null 2>&1 || true
-# Raw iptables safety net: even if UFW rules get flushed, SSH stays alive
 sudo iptables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
 sudo iptables -I INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
 sudo ip6tables -I INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
 sudo ip6tables -I INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
 
-run_with_log "Installing Dokploy" bash -c 'timeout 900 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
+# Run Dokploy install detached from terminal — if SSH drops, install continues
+DOKPLOY_LOG="/tmp/dokploy-install.log"
+printf "  \033[1;34m>> Installing Dokploy (output in %s)\033[0m\n" "$DOKPLOY_LOG" 2>/dev/null || true
+nohup bash -c 'timeout 900 bash -c "curl -sSL https://dokploy.com/install.sh | sh"' > "$DOKPLOY_LOG" 2>&1 &
+DOKPLOY_PID=$!
+
+# Wait for install with a spinner (falls back to silent wait if TTY is lost)
+if tty -s 2>/dev/null; then
+    gum spin --spinner dot --title "Installing Dokploy (~2-5 min)..." -- bash -c "
+        while kill -0 $DOKPLOY_PID 2>/dev/null; do sleep 2; done
+    " 2>/dev/null || true
+fi
+wait "$DOKPLOY_PID" || {
+    cat "$DOKPLOY_LOG" >> "$LOG_FILE"
+    error "Dokploy install failed -- check $DOKPLOY_LOG"
+}
+cat "$DOKPLOY_LOG" >> "$LOG_FILE"
+rm -f "$DOKPLOY_LOG"
 log "Dokploy installed"
 
-# Unhold UFW and clean up raw rules (UFW manages them now)
+# Clean up safety layers
 sudo apt-mark unhold ufw > /dev/null 2>&1 || true
 sudo iptables -D INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
 sudo iptables -D INPUT -p tcp --dport "$SSH_PORT" -j ACCEPT 2>/dev/null || true
