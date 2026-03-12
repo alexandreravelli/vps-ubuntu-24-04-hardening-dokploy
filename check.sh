@@ -27,17 +27,17 @@ WARN_COUNT=0
 
 pass() {
     gum style --foreground 2 "  [PASS] $1"
-    ((PASS_COUNT++))
+    ((PASS_COUNT++)) || true
 }
 
 fail() {
     gum style --foreground 1 --bold "  [FAIL] $1"
-    ((FAIL_COUNT++))
+    ((FAIL_COUNT++)) || true
 }
 
 warn_check() {
     gum style --foreground 3 "  [WARN] $1"
-    ((WARN_COUNT++))
+    ((WARN_COUNT++)) || true
 }
 
 section() {
@@ -55,7 +55,7 @@ gum style \
     --margin "0 2" \
     --bold \
     --align center \
-    "VPS HARDENING CHECK  v$VERSION" \
+    "VPS HARDENING CHECK" \
     "Post-install security audit"
 
 # === SSH ===
