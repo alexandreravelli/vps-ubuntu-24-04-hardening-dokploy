@@ -45,7 +45,7 @@ cleanup_on_error() {
         printf "  Check the log: %s\n" "$LOG_FILE"
         printf "  \033[1;31m──────────────────────────────────────────────\033[0m\n"
 
-        if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ]; then
+        if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ] || [ "$SETUP_PHASE" = "docker" ] || [ "$SETUP_PHASE" = "dokploy" ]; then
             echo ""
             printf "  \033[1;33m[!] Restoring SSH access on port 22 as a safety measure...\033[0m\n"
             sudo ufw allow 22/tcp 2>/dev/null || true
@@ -63,6 +63,8 @@ cleanup_on_error() {
     fi
 }
 trap cleanup_on_error EXIT
+# Ignore SIGHUP so the script continues if the SSH session drops (e.g., during Dokploy install)
+trap '' HUP
 
 # === INSTALL GUM ===
 if ! command -v gum &>/dev/null; then
@@ -99,24 +101,25 @@ run_with_spinner() {
 }
 
 run_with_log() {
-    # Runs a command in the background while streaming its output live.
-    # Uses a tmpfile + tail -f so output appears in real time without blocking.
+    # Runs a command while streaming its output live.
     local label="$1"
     shift
     sudo -v 2>/dev/null || true  # Refresh sudo token to prevent timeout during long operations
     printf "  \033[1;34m>> %s\033[0m\n" "$label"
     local tmpfile
-    tmpfile=$(mktemp)
+    tmpfile=$(mktemp) || { echo "Failed to create temp file"; return 1; }
+    # Run command, capture exit code, then display output (avoids tail race condition)
     "$@" > "$tmpfile" 2>&1 &
     local pid=$!
+    # Stream output in real time using a background tail
     tail -f "$tmpfile" 2>/dev/null | while IFS= read -r line; do
         printf "  \033[0;90m   %s\033[0m\n" "$line"
     done &
     local tail_pid=$!
     wait "$pid"
     local exit_code=$?
-    sleep 0.5  # Allow tail to flush remaining output before killing it
-    kill "$tail_pid" 2>/dev/null || true
+    sleep 1  # Allow tail to flush remaining output
+    kill "$tail_pid" 2>/dev/null; wait "$tail_pid" 2>/dev/null || true
     rm -f "$tmpfile"
     return "$exit_code"
 }
@@ -573,7 +576,7 @@ run_with_spinner "Applying kernel parameters" sudo sysctl --system
 log "Kernel hardening applied"
 
 # Core dump restriction
-echo '* hard core 0' | sudo tee /etc/security/limits.d/core.conf > /dev/null
+echo '* hard core 0' | sudo tee /etc/security/limits.d/no-core.conf > /dev/null
 log "Core dumps restricted"
 
 # /tmp hardening (noexec,nosuid,nodev) via tmpfs
@@ -585,7 +588,7 @@ if ! mount | grep -q '/tmp.*noexec'; then
 fi
 
 # Disable USB mass storage (headless VPS)
-echo 'install usb-storage /bin/true' | sudo tee /etc/modprobe.d/disable-usb-storage.conf > /dev/null
+echo 'install usb-storage /bin/true' | sudo tee /etc/modprobe.d/no-usb-storage.conf > /dev/null
 log "USB mass storage disabled"
 
 # === STEP 5: INSTALL SECURITY TOOLS ===
@@ -914,11 +917,10 @@ log "Docker log rotation configured"
 
 # Initialize Docker Swarm (required for Dokploy/Traefik)
 if ! sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
-    SWARM_ADDR=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || \
-                 curl -s --max-time 10 -6 ifconfig.me 2>/dev/null || \
-                 hostname -I | tr ' ' '\n' | grep -vE '^(127\.|172\.|10\.|192\.168\.)' | head -1 || \
-                 true)
-    [ -n "$SWARM_ADDR" ] || error "Could not determine public IP for Docker Swarm -- check network connectivity"
+    # Use the IP of the default route interface (works behind NAT on AWS/GCP/Oracle Cloud)
+    # Swarm needs a local interface IP, not the public NAT IP from ifconfig.me
+    SWARM_ADDR=$(ip -4 route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1 || true)
+    [ -n "$SWARM_ADDR" ] || error "Could not determine local IP for Docker Swarm -- check network connectivity"
     run_with_spinner "Initializing Docker Swarm" sudo docker swarm init --advertise-addr "$SWARM_ADDR"
     log "Docker Swarm initialized (required for Traefik)"
 else
@@ -942,11 +944,12 @@ for cmd in iptables ip6tables; do
     $cmd -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
     $cmd -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
     $cmd -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    # Allow Docker bridge networks (172.16.0.0/12) + overlay/Swarm networks (10.0.0.0/8)
-    $cmd -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
-    $cmd -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
     $cmd -I DOCKER-USER -i lo -j ACCEPT
 done
+# Allow Docker bridge networks (172.16.0.0/12) + overlay/Swarm networks (10.0.0.0/8)
+# IPv4 only -- these subnets are not valid for ip6tables
+iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
+iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
 FWSCRIPT
 sudo chmod 750 /usr/local/bin/docker-firewall.sh
 
@@ -981,8 +984,20 @@ CURRENT_STEP=9
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~2-5 min)"
 SETUP_PHASE="dokploy"
 
+# Save iptables rules before Dokploy (its install may flush all rules and kill SSH)
+sudo iptables-save > /tmp/iptables-pre-dokploy.v4 2>/dev/null || true
+sudo ip6tables-save > /tmp/iptables-pre-dokploy.v6 2>/dev/null || true
+
 run_with_log "Installing Dokploy" bash -c 'timeout 900 bash -c "curl -sSL https://dokploy.com/install.sh | sudo sh"'
 log "Dokploy installed"
+
+# Restore iptables if Dokploy's install flushed them (prevents SSH lockout)
+if ! sudo iptables -L INPUT -n 2>/dev/null | grep -q "dpt:22"; then
+    sudo iptables-restore < /tmp/iptables-pre-dokploy.v4 2>/dev/null || true
+    sudo ip6tables-restore < /tmp/iptables-pre-dokploy.v6 2>/dev/null || true
+    log "Restored iptables rules after Dokploy install"
+fi
+rm -f /tmp/iptables-pre-dokploy.v4 /tmp/iptables-pre-dokploy.v6
 
 # Dokploy install script removes UFW (conflicts with iptables-persistent which Dokploy uses).
 # Reinstall UFW and re-apply rules. netfilter-persistent is NOT reinstalled -- we use the
@@ -992,12 +1007,13 @@ if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
     sudo ufw --force reset > /dev/null
     sudo ufw default deny incoming > /dev/null
     sudo ufw default allow outgoing > /dev/null
+    sudo ufw allow 22/tcp > /dev/null
     sudo ufw allow "$SSH_PORT/tcp" > /dev/null
     sudo ufw allow 80/tcp > /dev/null
     sudo ufw allow 443/tcp > /dev/null
     sudo ufw allow 3000/tcp > /dev/null
     sudo ufw --force enable > /dev/null
-    log "UFW reinstalled and reconfigured after Dokploy (port 22 intentionally blocked)"
+    log "UFW reinstalled and reconfigured after Dokploy (port 22 kept open until CONFIRM)"
 fi
 
 # Re-apply needrestart SSH protection (Dokploy install may have altered it)
@@ -1024,6 +1040,7 @@ exit 1
 # === DOWNLOAD POST-INSTALL SCRIPTS ===
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
 USER_HOME=$(getent passwd "$NEW_USER" | cut -d: -f6)
+[ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || error "Cannot find home directory for user '$NEW_USER'"
 for script in cleanup.sh check.sh; do
     if curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script" 2>/dev/null; then
         chmod +x "$USER_HOME/$script"
@@ -1048,6 +1065,36 @@ if echo "$PUBLIC_IP" | grep -q ":"; then
     SSH_HOST="[$PUBLIC_IP]"
 else
     SSH_HOST="$PUBLIC_IP"
+fi
+
+# Write summary file early so it exists even if the session drops before CONFIRM
+sudo tee "$USER_HOME/.vps_setup_summary" > /dev/null << EOF
+# VPS Setup Summary - $(date +%Y-%m-%d)
+# Generated by VPS Hardening Script v$VERSION
+HOST=$PUBLIC_IP
+USER=$NEW_USER
+SSH_PORT=$SSH_PORT
+DOKPLOY_URL=http://$PUBLIC_IP:3000
+SSH_CMD=ssh $NEW_USER@$SSH_HOST -p $SSH_PORT
+LOG_RETENTION=${LOG_DAYS}_days
+LOG_FILE=$LOG_FILE
+STATUS=pending_confirm
+EOF
+sudo chown "$NEW_USER:$NEW_USER" "$USER_HOME/.vps_setup_summary"
+sudo chmod 600 "$USER_HOME/.vps_setup_summary"
+log "Setup summary saved to $USER_HOME/.vps_setup_summary"
+
+# Check if terminal is still available (SSH session may have dropped during Dokploy install)
+if ! tty -s 2>/dev/null; then
+    warn "Terminal lost (SSH session dropped). Skipping interactive CONFIRM."
+    warn "Run the final hardening manually -- see $USER_HOME/.vps_setup_summary"
+    log "Setup completed without CONFIRM (terminal lost). Port 22 and password auth still open."
+    # Jump to final summary (non-interactive)
+    ELAPSED=$(( SECONDS - START_TIME ))
+    ELAPSED_MIN=$(( ELAPSED / 60 ))
+    ELAPSED_SEC=$(( ELAPSED % 60 ))
+    log "Setup completed in ${ELAPSED_MIN}m ${ELAPSED_SEC}s (pending manual CONFIRM)"
+    exit 0
 fi
 
 gum style \
@@ -1130,6 +1177,8 @@ EOF
         sudo ufw limit "$SSH_PORT/tcp" > /dev/null
         sudo ufw delete allow "$SSH_PORT/tcp" > /dev/null
 
+        # Update summary status
+        sudo sed -i 's/STATUS=pending_confirm/STATUS=complete/' "$USER_HOME/.vps_setup_summary"
         log "Port 22 closed, password auth disabled, rate limiting enabled"
     else
         warn "Confirmation cancelled -- keeping port 22 and password auth open"
@@ -1192,21 +1241,6 @@ else
         fi
     fi
 fi
-
-# === CONFIG SUMMARY FILE ===
-sudo tee "/home/$NEW_USER/.vps_setup_summary" > /dev/null << EOF
-# VPS Setup Summary - $(date +%Y-%m-%d)
-# Generated by VPS Hardening Script v$VERSION
-HOST=$PUBLIC_IP
-USER=$NEW_USER
-SSH_PORT=$SSH_PORT
-DOKPLOY_URL=http://$PUBLIC_IP:3000
-SSH_CMD=ssh $NEW_USER@$SSH_HOST -p $SSH_PORT
-LOG_RETENTION=${LOG_DAYS}_days
-LOG_FILE=$LOG_FILE
-EOF
-sudo chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.vps_setup_summary"
-sudo chmod 600 "/home/$NEW_USER/.vps_setup_summary"
 
 # === FINAL SUMMARY ===
 echo ""
