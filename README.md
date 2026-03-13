@@ -10,7 +10,7 @@
 <p align="center">
   <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
   One script. 9 steps. Hardened OS + Dokploy PaaS in ~10 minutes.<br><br>
-  <a href="#-requirements">Requirements</a> · <a href="#-quick-start">Quick Start</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-security">Security</a> · <a href="#-ssh-key-options">SSH Keys</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-faq">FAQ</a>
+  <a href="#-quick-start">Quick Start</a> · <a href="#-requirements">Requirements</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-security">Security</a> · <a href="#-faq">FAQ</a>
 </p>
 
 <p align="center">
@@ -19,9 +19,19 @@
 
 ---
 
-## 💡 Why?
+## 🚀 Quick Start
 
-Most VPS come with a bare OS and no security. Hardening one manually takes hours and is easy to get wrong. This script does it all interactively, with an interactive CLI built on [gum](https://github.com/charmbracelet/gum) for prompts and spinners, and deploys [Dokploy](https://dokploy.com) (self-hosted PaaS) on top.
+Connect to your VPS and run:
+
+```bash
+sudo -i  # switch to root (required)
+```
+
+```bash
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+```
+
+> **Not root?** No worries — the script detects this and auto-escalates with `sudo`.
 
 ---
 
@@ -45,25 +55,9 @@ Most VPS come with a bare OS and no security. Hardening one manually takes hours
 
 ---
 
-## 🚀 Quick Start
-
-Connect to your VPS and run:
-
-```bash
-sudo -i  # switch to root (required)
-```
-
-```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
-```
-
-> **Not root?** No worries -- the script detects this and auto-escalates with `sudo`.
-
----
-
 ## ⚙️ What It Does
 
-**9 interactive steps** · **~10 minutes** · All prompts handled via CLI — no config files to edit
+**9 interactive steps** · **~10 minutes** · All prompts handled via an interactive CLI built on [gum](https://github.com/charmbracelet/gum) — no config files to edit
 
 ```
 [========            ] Step 4/9 -- Kernel hardening
@@ -82,6 +76,75 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 9 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~1-2min |
 
 > ⚠️ **After step 9**, the script asks you to test your SSH connection on the new port. Only after typing `CONFIRM` will it close port 22 and disable password auth.
+
+---
+
+## 📋 After Installation
+
+### Connect to your server
+
+```bash
+ssh your-user@your-ip -p <SSH_PORT>
+# Full command is saved in ~/.vps_setup_summary
+```
+
+> **IPv6 server?** Use brackets: `ssh your-user@[2001:db8::1] -p <SSH_PORT>` — the script handles this automatically in its output.
+
+### Remove default user
+
+> `cleanup.sh` and `check.sh` are automatically downloaded to your home directory during setup.
+
+```bash
+sudo ./cleanup.sh          # interactive
+sudo ./cleanup.sh ubuntu   # direct
+```
+
+### Run security audit
+
+```bash
+sudo ./check.sh
+```
+
+```
+  [PASS] Root login disabled
+  [PASS] Password authentication disabled
+  [PASS] Custom SSH port: 54821
+  ...
+  PASS: 28  FAIL: 0  WARN: 1  TOTAL: 29
+```
+
+### Secure Dokploy
+
+1. Create your admin account at `http://your-ip:3000`
+2. **Enable MFA** on your Dokploy account (Settings > Security)
+3. Configure your domain + SSL in Dokploy
+4. Close port 3000 (only needed for initial setup):
+
+```bash
+# Remove from UFW (host firewall)
+sudo ufw delete allow 3000/tcp
+# Remove from Docker's firewall chain
+sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
+sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
+```
+
+> No `netfilter-persistent save` needed — port 3000 is not in the persistent `docker-firewall.service`, so it won't come back after reboot.
+
+> If using an external firewall, also close port 3000 in your provider's control panel.
+
+### Clean up setup files
+
+Once everything is verified, remove the setup scripts from the server:
+
+```bash
+sudo ./purge.sh
+```
+
+> This deletes all script files (setup.sh, cleanup.sh, check.sh, purge.sh) from the server. Your config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`) is preserved.
+
+### Best Practices
+
+- **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) — prevents containers across projects from communicating with each other.
 
 ---
 
@@ -192,88 +255,6 @@ At step 2, you choose:
 
 ---
 
-## 📋 After Installation
-
-### Connect to your server
-
-```bash
-ssh your-user@your-ip -p <SSH_PORT>
-# Full command is saved in ~/.vps_setup_summary
-```
-
-> **IPv6 server?** Use brackets: `ssh your-user@[2001:db8::1] -p <SSH_PORT>` — the script handles this automatically in its output.
-
-### Remove default user
-
-> `cleanup.sh` and `check.sh` are automatically downloaded to your home directory during setup.
-
-```bash
-sudo ./cleanup.sh          # interactive
-sudo ./cleanup.sh ubuntu   # direct
-```
-
-### Run security audit
-
-```bash
-sudo ./check.sh
-```
-
-```
-  [PASS] Root login disabled
-  [PASS] Password authentication disabled
-  [PASS] Custom SSH port: 54821
-  ...
-  PASS: 28  FAIL: 0  WARN: 1  TOTAL: 29
-```
-
-### Secure Dokploy
-
-1. Create your admin account at `http://your-ip:3000`
-2. **Enable MFA** on your Dokploy account (Settings > Security)
-3. Configure your domain + SSL in Dokploy
-4. Close port 3000 (only needed for initial setup):
-
-```bash
-# Remove from UFW (host firewall)
-sudo ufw delete allow 3000/tcp
-# Remove from Docker's firewall chain
-sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
-sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-```
-
-> No `netfilter-persistent save` needed — port 3000 is not in the persistent `docker-firewall.service`, so it won't come back after reboot.
-
-> If using an external firewall, also close port 3000 in your provider's control panel.
-
-### Clean up setup files
-
-Once everything is verified, remove the setup scripts from the server:
-
-```bash
-sudo ./purge.sh
-```
-
-> This deletes all script files (setup.sh, cleanup.sh, check.sh, purge.sh) from the server. Your config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`) is preserved.
-
-### Best Practices
-
-- **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) — prevents containers across projects from communicating with each other.
-
----
-
-## 📁 Project Structure
-
-```
-.
-├── setup.sh        # Main hardening script (interactive CLI)
-├── cleanup.sh      # Remove the default user
-├── check.sh        # Post-install security audit
-├── purge.sh        # Remove setup files from server
-└── LICENSE
-```
-
----
-
 ## ❓ FAQ
 
 <details>
@@ -319,6 +300,19 @@ Yes. Comment out step 9 in `setup.sh` and remove port 3000 from the firewall rul
 
 Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH service management).
 </details>
+
+---
+
+## 📁 Project Structure
+
+```
+.
+├── setup.sh        # Main hardening script (interactive CLI)
+├── cleanup.sh      # Remove the default user
+├── check.sh        # Post-install security audit
+├── purge.sh        # Remove setup files from server
+└── LICENSE
+```
 
 ---
 
