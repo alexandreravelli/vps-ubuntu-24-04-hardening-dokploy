@@ -24,7 +24,7 @@
 Connect to your VPS and run:
 
 ```bash
-sudo -i  # switch to root (required)
+sudo -i
 ```
 
 ```bash
@@ -83,9 +83,10 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 
 ### Connect to your server
 
+The full command is saved in `~/.vps_setup_summary`.
+
 ```bash
 ssh your-user@your-ip -p <SSH_PORT>
-# Full command is saved in ~/.vps_setup_summary
 ```
 
 > **IPv6 server?** Use brackets: `ssh your-user@[2001:db8::1] -p <SSH_PORT>` — the script handles this automatically in its output.
@@ -94,23 +95,24 @@ ssh your-user@your-ip -p <SSH_PORT>
 
 > `cleanup.sh` and `check.sh` are automatically downloaded to your home directory during setup.
 
+Interactive mode — the script lists existing users and lets you choose which one to delete:
+
 ```bash
-sudo ./cleanup.sh          # interactive
-sudo ./cleanup.sh ubuntu   # direct
+sudo ./cleanup.sh
+```
+
+Direct mode — deletes the specified user immediately:
+
+```bash
+sudo ./cleanup.sh ubuntu
 ```
 
 ### Run security audit
 
+Checks all hardening settings and reports any misconfiguration:
+
 ```bash
 sudo ./check.sh
-```
-
-```
-  [PASS] Root login disabled
-  [PASS] Password authentication disabled
-  [PASS] Custom SSH port: 54821
-  ...
-  PASS: 28  FAIL: 0  WARN: 1  TOTAL: 29
 ```
 
 ### Secure Dokploy
@@ -120,10 +122,15 @@ sudo ./check.sh
 3. Configure your domain + SSL in Dokploy
 4. Close port 3000 (only needed for initial setup):
 
+Remove from UFW (host firewall):
+
 ```bash
-# Remove from UFW (host firewall)
 sudo ufw delete allow 3000/tcp
-# Remove from Docker's firewall chain
+```
+
+Remove from Docker's firewall chain:
+
+```bash
 sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT
 sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 ```
