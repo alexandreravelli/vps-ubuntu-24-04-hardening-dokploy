@@ -10,7 +10,7 @@
 <p align="center">
   <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
   One script. 9 steps. Hardened OS + Dokploy PaaS in ~10 minutes.<br><br>
-  <a href="#-quick-start">Quick Start</a> · <a href="#-requirements">Requirements</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-after-installation">Post-Install</a> · <a href="#-security">Security</a> · <a href="#-faq">FAQ</a>
+  <a href="#-quick-start">Quick Start</a> · <a href="#-requirements">Requirements</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-after-installation">After Installation</a> · <a href="#-security">Security</a> · <a href="#-faq">FAQ</a>
 </p>
 
 <p align="center">
@@ -77,6 +77,18 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 
 > ⚠️ **After step 9**, the script asks you to test your SSH connection on the new port. Only after typing `CONFIRM` will it close port 22 and disable password auth.
 
+<details>
+<summary><strong>🔑 SSH key options (step 2)</strong></summary>
+
+| Option | What happens |
+|--------|-------------|
+| **Paste existing key** | You paste your `ssh-ed25519` (recommended) or `ssh-rsa` (legacy) public key |
+| **Generate new pair** | Script creates an ed25519 pair, displays the private key for you to save, installs the public key, then **securely deletes** the private key with `shred` |
+
+> When generating a new key pair, the script asks if you want to **protect it with a passphrase**. Even if someone gets your private key file, they can't use it without the passphrase.
+
+</details>
+
 ---
 
 ## 📋 After Installation
@@ -139,6 +151,8 @@ sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 
 > If using an external firewall, also close port 3000 in your provider's control panel.
 
+5. **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) — prevents containers across projects from communicating with each other.
+
 ### Clean up setup files
 
 Once everything is verified, remove the setup scripts from the server:
@@ -148,10 +162,6 @@ sudo ./purge.sh
 ```
 
 > This deletes all script files (setup.sh, cleanup.sh, check.sh, purge.sh) from the server. Your config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`) is preserved.
-
-### Best Practices
-
-- **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) — prevents containers across projects from communicating with each other.
 
 ---
 
@@ -249,29 +259,20 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 
 ---
 
-## 🔑 SSH Key Options
-
-At step 2, you choose:
-
-| Option | What happens |
-|--------|-------------|
-| **Paste existing key** | You paste your `ssh-ed25519` (recommended) or `ssh-rsa` (legacy) public key |
-| **Generate new pair** | Script creates an ed25519 pair, displays the private key for you to save, installs the public key, then **securely deletes** the private key with `shred` |
-
-> When generating a new key pair, the script asks if you want to **protect it with a passphrase**. Even if someone gets your private key file, they can't use it without the passphrase.
-
----
-
 ## ❓ FAQ
 
 <details>
 <summary><strong>What if I lose my SSH key?</strong></summary>
 
-Use your VPS provider's console/VNC access, then:
+Use your VPS provider's console/VNC access, then edit the SSH config and set `PasswordAuthentication yes`:
 
 ```bash
 sudo nano /etc/ssh/sshd_config.d/hardening.conf
-# Change PasswordAuthentication to yes
+```
+
+Then restart the SSH service:
+
+```bash
 sudo systemctl restart ssh
 ```
 </details>
@@ -312,14 +313,13 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 
 ## 📁 Project Structure
 
-```
-.
-├── setup.sh        # Main hardening script (interactive CLI)
-├── cleanup.sh      # Remove the default user
-├── check.sh        # Post-install security audit
-├── purge.sh        # Remove setup files from server
-└── LICENSE
-```
+| File | Purpose |
+|------|---------|
+| `setup.sh` | Main hardening script (interactive CLI) |
+| `cleanup.sh` | Remove the default user |
+| `check.sh` | Post-install security audit |
+| `purge.sh` | Remove setup files from server |
+| `LICENSE` | MIT license |
 
 ---
 
@@ -327,7 +327,7 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 
 1. Fork the repo
 2. Create a feature branch
-3. Make sure `shellcheck -S warning setup.sh cleanup.sh check.sh` passes
+3. Make sure `shellcheck -S warning setup.sh cleanup.sh check.sh purge.sh` passes
 4. Open a PR using the provided template
 
 ---
