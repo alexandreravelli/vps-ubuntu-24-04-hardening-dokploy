@@ -128,7 +128,7 @@ Dokploy's installer (`curl | sh`) can interfere with firewall rules, remove UFW,
 
 ## 📋 After Installation
 
-### Connect to your server
+### 1. Connect on your new SSH port
 
 The full command is saved in `~/.vps_setup_summary`.
 
@@ -138,39 +138,15 @@ ssh your-user@your-ip -p <SSH_PORT>
 
 > **IPv6 server?** Use brackets: `ssh your-user@[2001:db8::1] -p <SSH_PORT>` — the script handles this automatically in its output.
 
-### Remove default user
-
-> `cleanup.sh` and `check.sh` are automatically downloaded to your home directory during setup.
-
-Interactive mode — the script lists existing users and lets you choose which one to delete:
-
-```bash
-sudo ./cleanup.sh
-```
-
-Direct mode — deletes the specified user immediately:
-
-```bash
-sudo ./cleanup.sh ubuntu
-```
-
-### Run security audit
-
-Checks all hardening settings and reports any misconfiguration:
-
-```bash
-sudo ./check.sh
-```
-
-### Install Docker + Dokploy
-
-If you haven't already:
+### 2. Install Docker + Dokploy (optional)
 
 ```bash
 sudo ./install-dokploy.sh
 ```
 
-### Secure Dokploy
+> All scripts are automatically downloaded to your home directory during setup.
+
+### 3. Secure Dokploy
 
 1. Create your admin account at `http://your-ip:3000`
 2. **Enable MFA** on your Dokploy account (Settings > Security)
@@ -196,7 +172,29 @@ sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 
 5. **Enable Isolated Deployment** on each project (Settings > Project > Isolated Deployment) — prevents containers across projects from communicating with each other.
 
-### Clean up setup files
+### 4. Remove default user
+
+Interactive mode — the script lists existing users and lets you choose which one to delete:
+
+```bash
+sudo ./cleanup.sh
+```
+
+Direct mode — deletes the specified user immediately:
+
+```bash
+sudo ./cleanup.sh ubuntu
+```
+
+### 5. Run security audit
+
+Checks all hardening settings and reports any misconfiguration:
+
+```bash
+sudo ./check.sh
+```
+
+### 6. Clean up setup files
 
 Once everything is verified, remove the setup scripts from the server:
 
