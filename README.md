@@ -40,6 +40,7 @@ This hardens the OS in 7 steps (~5 min). At the end, test your SSH connection on
 Reconnect on your new SSH port, then:
 
 ```bash
+cd ~/vps-hardening/
 sudo ./install-dokploy.sh
 ```
 
