@@ -41,6 +41,12 @@ for var in SSH_PORT NEW_USER LOG_DAYS; do
     fi
 done
 
+# Validate SSH_PORT is a number in valid range
+if ! echo "$SSH_PORT" | grep -qE '^[0-9]+$' || [ "$SSH_PORT" -lt 1024 ] || [ "$SSH_PORT" -gt 65535 ]; then
+    echo "[ERROR] Invalid SSH_PORT=$SSH_PORT in $CONFIG_FILE -- expected a number between 1024 and 65535"
+    exit 1
+fi
+
 LOG_FILE="/var/log/vps_setup.log"
 TOTAL_STEPS=3
 CURRENT_STEP=0
@@ -323,7 +329,8 @@ if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
     run_with_spinner "Reinstalling UFW (removed by Dokploy)" sudo apt-get install -y -qq ufw
 fi
 
-# 2. Re-apply UFW rules
+# 2. Re-apply UFW rules (force reset removes any manual rules added after setup.sh)
+warn "UFW rules will be reset to match hardening config (any manual rules will be lost)"
 sudo ufw --force reset > /dev/null
 sudo ufw default deny incoming > /dev/null
 sudo ufw default allow outgoing > /dev/null

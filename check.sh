@@ -165,8 +165,11 @@ section "Firewall (UFW)"
 if sudo ufw status | grep -q "Status: active"; then
     pass "UFW is active"
 
-    if sudo ufw status | grep -q "LIMIT"; then
-        pass "Rate limiting enabled on SSH"
+    SSH_PORT_CHECK=$(grep "^Port " /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null | tail -1 | awk '{print $2}')
+    if [ -n "$SSH_PORT_CHECK" ] && sudo ufw status | grep -q "$SSH_PORT_CHECK.*LIMIT"; then
+        pass "Rate limiting enabled on SSH port $SSH_PORT_CHECK"
+    elif sudo ufw status | grep -q "LIMIT"; then
+        warn_check "Rate limiting exists but may not be on custom SSH port"
     else
         warn_check "No rate limiting detected on SSH port"
     fi
