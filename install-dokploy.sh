@@ -417,6 +417,7 @@ fi
 sudo cp /etc/ufw/user.rules "/etc/ufw/user.rules.bak.$(date +%s)" 2>/dev/null || true
 sudo cp /etc/ufw/user6.rules "/etc/ufw/user6.rules.bak.$(date +%s)" 2>/dev/null || true
 warn "UFW rules backed up and will be reset to match hardening config"
+sudo ufw disable > /dev/null 2>&1 || true
 sudo ufw --force reset > /dev/null
 sudo ufw default deny incoming > /dev/null
 sudo ufw default allow outgoing > /dev/null
