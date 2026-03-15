@@ -1031,9 +1031,10 @@ if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null;
     sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
     # Write socket override and apply
     mkdir -p /etc/systemd/system/ssh.socket.d
-    echo -e '[Socket]\nListenStream=\nListenStream=$SSH_PORT' > /etc/systemd/system/ssh.socket.d/override.conf
+    printf '[Socket]\nListenStream=\nListenStream=0.0.0.0:%s\nListenStream=[::]:%s\n' '$SSH_PORT' '$SSH_PORT' > /etc/systemd/system/ssh.socket.d/override.conf
     systemctl daemon-reload
-    systemctl restart ssh.socket 2>/dev/null || true
+    systemctl stop ssh.socket ssh.service 2>/dev/null || true
+    systemctl start ssh.socket 2>/dev/null || true
     # Firewall
     ufw delete allow 22/tcp 2>/dev/null || true
     # Cleanup
@@ -1124,15 +1125,18 @@ EOF
             sudo rm -f /run/sshd-hardened.pid
         fi
 
-        # Write ssh.socket override and apply NOW (port 22 is confirmed working)
+        # Write ssh.socket override and apply NOW
         sudo mkdir -p /etc/systemd/system/ssh.socket.d
         sudo tee /etc/systemd/system/ssh.socket.d/override.conf > /dev/null << EOF
 [Socket]
 ListenStream=
-ListenStream=$SSH_PORT
+ListenStream=0.0.0.0:$SSH_PORT
+ListenStream=[::]:$SSH_PORT
 EOF
         sudo systemctl daemon-reload
-        sudo systemctl restart ssh.socket 2>/dev/null || true
+        # Full stop then start (restart fails when ssh.service is active)
+        sudo systemctl stop ssh.socket ssh.service 2>/dev/null || true
+        sudo systemctl start ssh.socket || error "Failed to start ssh.socket on port $SSH_PORT"
 
         sudo ufw delete allow 22/tcp 2>/dev/null || true
         sudo ufw delete allow from any to any port 22 proto tcp 2>/dev/null || true
