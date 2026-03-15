@@ -1070,7 +1070,8 @@ else
     echo ""
     printf "  sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf\n"
     printf "  sudo sed -i '/^Port 22\$/d' /etc/ssh/sshd_config.d/hardening.conf\n"
-    printf "  sudo systemctl reload ssh\n"
+    printf "  sudo systemctl daemon-reload\n"
+    printf "  sudo systemctl restart ssh.socket\n"
     printf "  sudo ufw delete allow 22/tcp\n"
 fi
 
