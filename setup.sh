@@ -76,6 +76,7 @@ cleanup_on_error() {
             sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
             sudo rm -f /run/sshd-hardened.pid 2>/dev/null || true
         fi
+        sudo rm -f /etc/ssh/sshd_test_config 2>/dev/null || true
 
         if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ] || [ "$SETUP_PHASE" = "ssh-test" ]; then
             echo ""
@@ -907,20 +908,22 @@ EOF
 
 sudo /usr/sbin/sshd -t || error "SSH config validation failed"
 
-# Start standalone sshd on custom port for this session.
-# Use -f /dev/null to avoid loading hardening.conf (which would conflict
-# with Port 22 already bound by ssh.socket and apply restrictive ciphers).
-# Explicit options ensure password + pubkey auth work for the SSH test.
-sudo /usr/sbin/sshd -f /dev/null \
-    -p "$SSH_PORT" \
-    -o "PidFile=/run/sshd-hardened.pid" \
-    -o "HostKey=/etc/ssh/ssh_host_ed25519_key" \
-    -o "HostKey=/etc/ssh/ssh_host_rsa_key" \
-    -o "PasswordAuthentication yes" \
-    -o "PubkeyAuthentication yes" \
-    -o "UsePAM yes" \
-    -o "AuthorizedKeysFile .ssh/authorized_keys" \
-    -o "Subsystem sftp /usr/lib/openssh/sftp-server"
+# Start standalone sshd on custom port for testing.
+# Uses a dedicated config file to avoid loading hardening.conf
+# (which would conflict with Port 22 on ssh.socket and apply restrictive ciphers).
+sudo tee /etc/ssh/sshd_test_config > /dev/null << SSHD_TEST
+Port $SSH_PORT
+PidFile /run/sshd-hardened.pid
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+PasswordAuthentication yes
+PubkeyAuthentication yes
+UsePAM yes
+AuthorizedKeysFile .ssh/authorized_keys
+PermitRootLogin no
+Subsystem sftp /usr/lib/openssh/sftp-server
+SSHD_TEST
+sudo /usr/sbin/sshd -f /etc/ssh/sshd_test_config || error "Failed to start standalone sshd on port $SSH_PORT"
 
 # NOTE: ssh.socket override is NOT written here. It is written in the CONFIRM
 # block after the user has verified the connection works. This prevents:
@@ -1035,6 +1038,7 @@ if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null;
     ufw delete allow 22/tcp 2>/dev/null || true
     # Cleanup
     rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf
+    rm -f /etc/ssh/sshd_test_config
     sed -i 's/STATUS=pending_confirm/STATUS=auto_locked/' '$USER_HOME/.vps_setup_summary'
     echo "[AUTO-LOCKDOWN] \$(date) Port 22 closed after 24h timeout" >> '$LOG_FILE'
 fi
@@ -1155,8 +1159,9 @@ EOF
         sudo systemctl restart auditd 2>/dev/null || true
         log "Audit rules locked (immutable)"
 
-        # Remove temporary keepalive config (hardening.conf has its own ClientAlive settings)
+        # Remove temporary setup files
         sudo rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf
+        sudo rm -f /etc/ssh/sshd_test_config
 
         sudo sed -i 's/STATUS=pending_confirm/STATUS=complete/' "$USER_HOME/.vps_setup_summary"
         log "Port 22 closed, password auth disabled, rate limiting enabled"

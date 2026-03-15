@@ -574,8 +574,8 @@ fi
 # === SETUP CLEANUP ===
 section "Setup Cleanup"
 
-if [ -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf ]; then
-    warn_check "Temporary setup keepalive still present (should be removed after CONFIRM)"
+if [ -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf ] || [ -f /etc/ssh/sshd_test_config ]; then
+    warn_check "Temporary setup files still present (should be removed after CONFIRM)"
 else
     pass "No temporary setup files left behind"
 fi
