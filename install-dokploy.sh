@@ -159,6 +159,7 @@ run_with_log() {
     local tmpfile
     tmpfile=$(mktemp) || { echo "Failed to create temp file"; return 1; }
     # Ensure temp file is cleaned up even if script is interrupted
+    # shellcheck disable=SC2064 -- $tmpfile must expand now, not at signal time
     trap "rm -f '$tmpfile'; trap - RETURN" RETURN
     "$@" > "$tmpfile" 2>&1 &
     local pid=$!
