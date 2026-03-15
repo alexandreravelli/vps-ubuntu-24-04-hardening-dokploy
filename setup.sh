@@ -563,6 +563,19 @@ CURRENT_STEP=3
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Update system (~2-3 min)"
 SETUP_PHASE="system-update"
 
+# Harden the CURRENT SSH session to survive network disruptions caused by
+# sysctl changes, DNS reconfiguration, and auditd restarts later in the script.
+# This sets aggressive keepalives on the running sshd BEFORE we touch anything.
+sudo mkdir -p /etc/ssh/sshd_config.d
+if [ ! -f /etc/ssh/sshd_config.d/hardening.conf ]; then
+    sudo tee /etc/ssh/sshd_config.d/keepalive.conf > /dev/null << 'KEEPALIVE'
+ClientAliveInterval 15
+ClientAliveCountMax 10
+KEEPALIVE
+    sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload ssh.service 2>/dev/null || true
+    log "SSH keepalive configured (15s interval, 10 retries)"
+fi
+
 # Protect SSH from being restarted by needrestart BEFORE any apt operation
 sudo mkdir -p /etc/needrestart/conf.d
 sudo tee /etc/needrestart/conf.d/99-no-ssh-restart.conf > /dev/null << 'NEEDRESTART'
@@ -765,10 +778,11 @@ sudo tee /etc/audit/rules.d/hardening.rules > /dev/null << EOF
 -a always,exit -F arch=b64 -S adjtimex -S settimeofday -k time_change
 -a always,exit -F arch=b64 -S clock_settime -k time_change
 -a always,exit -F arch=b64 -S unlink -S rename -S unlinkat -S renameat -F auid>=1000 -F auid!=4294967295 -k delete
--e 2
 EOF
+# NOTE: -e 2 (immutable rules) is added after CONFIRM to avoid kernel audit
+# subsystem freeze that can disrupt SSH connections during setup.
 sudo systemctl restart auditd
-log "Audit logging configured"
+log "Audit logging configured (rules will be locked after CONFIRM)"
 
 # Unattended upgrades
 sudo tee /etc/apt/apt.conf.d/50unattended-upgrades > /dev/null << EOF
@@ -1089,6 +1103,14 @@ EOF
 
         sudo ufw limit "$SSH_PORT/tcp" > /dev/null
         sudo ufw delete allow "$SSH_PORT/tcp" > /dev/null
+
+        # Lock audit rules now that setup is confirmed
+        echo "-e 2" | sudo tee -a /etc/audit/rules.d/hardening.rules > /dev/null
+        sudo systemctl restart auditd 2>/dev/null || true
+        log "Audit rules locked (immutable)"
+
+        # Remove temporary keepalive config (hardening.conf has its own ClientAlive settings)
+        sudo rm -f /etc/ssh/sshd_config.d/keepalive.conf
 
         sudo sed -i 's/STATUS=pending_confirm/STATUS=complete/' "$USER_HOME/.vps_setup_summary"
         log "Port 22 closed, password auth disabled, rate limiting enabled"
