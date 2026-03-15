@@ -217,8 +217,8 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Session control | ClientAliveInterval 300s, ClientAliveCountMax 2, MaxSessions 4 |
 | User whitelist | `AllowUsers` restricts to admin only |
 | Forwarding restricted | X11 + agent forwarding off, TCP forwarding local only |
-| Strong ciphers | Mozilla Modern: chacha20-poly1305, aes256-gcm, curve25519 |
-| Post-quantum | `sntrup761x25519-sha512` key exchange |
+| Strong ciphers | chacha20-poly1305, aes256-gcm, aes256-ctr + compatible fallbacks for Termius/PuTTY |
+| Post-quantum | `sntrup761x25519-sha512` key exchange (with `curve25519` + `dh-group16` fallbacks) |
 | Extra hardening | PermitEmptyPasswords no, HostbasedAuthentication no, LogLevel VERBOSE |
 | Boot safety | `/run/sshd` created via `tmpfiles.d`, `ssh.socket` reconfigured for custom port |
 

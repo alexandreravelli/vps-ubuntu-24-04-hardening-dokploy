@@ -571,6 +571,25 @@ else
     warn_check "Needrestart SSH protection not configured (apt upgrades may restart SSH)"
 fi
 
+# === SETUP CLEANUP ===
+section "Setup Cleanup"
+
+if [ -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf ]; then
+    warn_check "Temporary setup keepalive still present (should be removed after CONFIRM)"
+else
+    pass "No temporary setup files left behind"
+fi
+
+if [ -f /run/sshd-hardened.pid ]; then
+    if kill -0 "$(cat /run/sshd-hardened.pid)" 2>/dev/null; then
+        warn_check "Standalone sshd still running (should be stopped after CONFIRM)"
+    else
+        warn_check "Stale sshd PID file exists (run: sudo rm -f /run/sshd-hardened.pid)"
+    fi
+else
+    pass "No standalone sshd running"
+fi
+
 # === SUMMARY ===
 TOTAL=$((PASS_COUNT + FAIL_COUNT + WARN_COUNT))
 
