@@ -820,6 +820,9 @@ CURRENT_STEP=6
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Configure firewall"
 SETUP_PHASE="firewall"
 
+# Disable UFW before reset to prevent flushing active iptables rules
+# (which would kill the current SSH session)
+sudo ufw disable > /dev/null 2>&1 || true
 sudo ufw --force reset > /dev/null
 sudo ufw default deny incoming > /dev/null
 sudo ufw default allow outgoing > /dev/null
