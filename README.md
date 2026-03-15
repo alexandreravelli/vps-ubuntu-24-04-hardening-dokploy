@@ -33,7 +33,7 @@ sudo -i
 curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
-This hardens the OS in 7 steps (~5 min). At the end, test your SSH connection on the new port and type `CONFIRM` to lock down.
+The script answers all your questions first, then applies hardening automatically. If your SSH session drops during hardening, the script continues in the background — reconnect with `screen -r hardening`.
 
 ### Step 2 — Install Docker + Dokploy (optional)
 
@@ -43,8 +43,6 @@ Reconnect on your new SSH port, then:
 cd ~/vps-hardening/
 sudo ./install-dokploy.sh
 ```
-
-This installs Docker, configures the DOCKER-USER firewall, and deploys Dokploy (~5 min).
 
 > **Not root?** No worries — both scripts detect this and auto-escalate with `sudo`.
 
@@ -74,10 +72,12 @@ This installs Docker, configures the DOCKER-USER firewall, and deploys Dokploy (
 
 ### setup.sh — Server Hardening
 
-**7 interactive steps** · **~5 minutes** · All prompts handled via an interactive CLI built on [gum](https://github.com/charmbracelet/gum)
+**3 phases** · **~5 minutes** · Built on [gum](https://github.com/charmbracelet/gum) for a clean interactive CLI
 
 ```
-[========            ] Step 4/7 -- Kernel hardening
+Phase 1 — Collect all inputs     (interactive — if SSH drops, nothing is modified)
+Phase 2 — Apply hardening        (non-interactive — survives SSH drops via screen)
+Phase 3 — SSH test + CONFIRM     (interactive — if SSH drops, server is safe with port 22 open)
 ```
 
 | # | Step | What happens | Time |
@@ -142,7 +142,7 @@ ssh your-user@your-ip -p <SSH_PORT>
 ### 2. Install Docker + Dokploy (optional)
 
 ```bash
-cd vps-hardening/
+cd ~/vps-hardening/
 sudo ./install-dokploy.sh
 ```
 
@@ -176,35 +176,24 @@ sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 
 ### 4. Remove default user
 
-Interactive mode — the script lists existing users and lets you choose which one to delete:
-
 ```bash
-cd vps-hardening/
+cd ~/vps-hardening/
 sudo ./cleanup.sh
 ```
 
-Direct mode — deletes the specified user immediately:
-
-```bash
-cd vps-hardening/
-sudo ./cleanup.sh ubuntu
-```
+Or directly: `sudo ./cleanup.sh ubuntu`
 
 ### 5. Run security audit
 
-Checks all hardening settings and reports any misconfiguration:
-
 ```bash
-cd vps-hardening/
+cd ~/vps-hardening/
 sudo ./check.sh
 ```
 
 ### 6. Clean up setup files
 
-Once everything is verified, remove the setup scripts from the server:
-
 ```bash
-cd vps-hardening/
+cd ~/vps-hardening/
 sudo ./purge.sh
 ```
 
@@ -229,8 +218,9 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | User whitelist | `AllowUsers` restricts to admin only |
 | Forwarding disabled | X11, TCP, agent forwarding all off |
 | Strong ciphers | Mozilla Modern: chacha20-poly1305, aes256-gcm, curve25519 |
+| Post-quantum | `sntrup761x25519-sha512` key exchange |
 | Extra hardening | PermitEmptyPasswords no, HostbasedAuthentication no, LogLevel VERBOSE |
-| Boot safety | `/run/sshd` created via `tmpfiles.d` (prevents privilege separation crash) |
+| Boot safety | `/run/sshd` created via `tmpfiles.d`, `ssh.socket` reconfigured for custom port |
 
 </details>
 
@@ -297,12 +287,15 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 
 | Feature | Details |
 |---------|---------|
+| Screen session | Script runs inside `screen` — survives SSH disconnection. Reconnect with `screen -r hardening` |
+| Input-first design | All questions asked before any system changes — if SSH drops during input, nothing is modified |
 | Error trap | Restores SSH access on port 22 if setup fails |
 | Config backup | `sshd_config.bak` saved before changes |
 | Summary file | `~/.vps_setup_summary` with all details (chmod 600) |
 | Double confirmation | `CONFIRM` required before closing port 22 |
 | No lockout | Password auth stays on until SSH key is verified |
 | Log | Full log saved to `/var/log/vps_setup.log` |
+| Safe purge | Scripts stored in `~/vps-hardening/` — purge never touches SSH keys or home directory |
 | sshd health check | `install-dokploy.sh` verifies sshd is still alive after Dokploy install |
 
 </details>
@@ -310,6 +303,19 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 ---
 
 ## ❓ FAQ
+
+<details>
+<summary><strong>What if my SSH session drops during setup?</strong></summary>
+
+The script runs inside `screen`. Reconnect to your server and run:
+
+```bash
+screen -r hardening
+```
+
+If the script was in Phase 2 (applying hardening), it continued running. If it was in Phase 1 (asking questions), nothing was modified — just restart the script.
+
+</details>
 
 <details>
 <summary><strong>What if I lose my SSH key?</strong></summary>
@@ -371,11 +377,11 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 
 | File | Purpose |
 |------|---------|
-| `setup.sh` | Server hardening (7 steps, standalone) |
+| `setup.sh` | Server hardening — 3 phases, 7 steps, survives SSH drops |
 | `install-dokploy.sh` | Docker + Dokploy installer (run after setup.sh) |
 | `cleanup.sh` | Remove the default user |
 | `check.sh` | Post-install security audit |
-| `purge.sh` | Remove setup files from server |
+| `purge.sh` | Remove setup files from server (safe — never touches SSH keys) |
 | `LICENSE` | MIT license |
 
 ---
