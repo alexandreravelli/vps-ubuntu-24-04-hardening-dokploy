@@ -408,6 +408,7 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         --padding "0 2" \
         --margin "0 2" \
         "⚠  IMPORTANT: Save your private key NOW" \
+        "Copy it to your password manager." \
         "This key will be DELETED from the server after this step."
     echo ""
 
