@@ -12,13 +12,37 @@ if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     exit 0
 fi
 
+# === ROOT CHECK ===
+if [ "$(id -u)" -ne 0 ]; then
+    if ! sudo -n true 2>/dev/null; then
+        echo "This script needs root privileges for accurate results."
+        echo "Re-running with sudo..."
+        exec sudo bash "$0" "$@"
+    fi
+fi
+
 # === INSTALL GUM IF NEEDED ===
-if ! command -v gum &>/dev/null; then
+install_gum() {
     echo "Installing gum..."
     sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    local GPG_TMP
+    GPG_TMP=$(mktemp)
+    curl -fsSL https://repo.charm.sh/apt/gpg.key -o "$GPG_TMP"
+    local CHARM_FP
+    CHARM_FP=$(gpg --with-colons --import-options show-only --import "$GPG_TMP" 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
+    local EXPECTED_FP="ED927B38BE981E53CA09153D03BBF595D4DFD35C"
+    if [ "$CHARM_FP" != "$EXPECTED_FP" ]; then
+        rm -f "$GPG_TMP"
+        echo "[ERROR] Charm GPG key fingerprint mismatch! Expected: $EXPECTED_FP Got: $CHARM_FP"
+        exit 1
+    fi
+    sudo gpg --yes --dearmor -o /etc/apt/keyrings/charm.gpg < "$GPG_TMP" 2>/dev/null
+    rm -f "$GPG_TMP"
     echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list > /dev/null
     sudo apt-get update -qq && sudo apt-get install -y -qq gum
+}
+if ! command -v gum &>/dev/null; then
+    install_gum
 fi
 
 PASS_COUNT=0
@@ -154,6 +178,14 @@ else
     warn_check "SSH LogLevel not set to VERBOSE"
 fi
 
+if grep -q "AllowTcpForwarding local" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+    pass "TCP forwarding restricted to local only"
+elif grep -q "AllowTcpForwarding no" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+    pass "TCP forwarding fully disabled"
+else
+    warn_check "AllowTcpForwarding not restricted"
+fi
+
 # === FIREWALL ===
 section "Firewall (UFW)"
 
@@ -189,6 +221,20 @@ if systemctl is-active fail2ban &>/dev/null; then
         pass "SSH jail active (currently banned: $BANNED)"
     else
         fail "SSH jail NOT active"
+    fi
+
+    if [ -f /etc/fail2ban/jail.local ]; then
+        F2B_BANTIME=$(grep "^bantime" /etc/fail2ban/jail.local 2>/dev/null | head -1 | awk '{print $NF}')
+        if [ -n "$F2B_BANTIME" ] && [ "$F2B_BANTIME" -ge 86400 ] 2>/dev/null; then
+            pass "Fail2Ban bantime >= 24h ($F2B_BANTIME seconds)"
+        elif [ -n "$F2B_BANTIME" ]; then
+            warn_check "Fail2Ban bantime is only $F2B_BANTIME seconds (recommend >= 86400)"
+        fi
+        if grep -q "bantime.increment" /etc/fail2ban/jail.local 2>/dev/null; then
+            pass "Fail2Ban progressive ban enabled"
+        else
+            warn_check "Fail2Ban progressive ban not configured"
+        fi
     fi
 else
     fail "Fail2Ban is NOT running"
@@ -248,14 +294,15 @@ section "/tmp Hardening"
 
 if mount | grep -q "/tmp.*noexec"; then
     pass "/tmp mounted with noexec"
+elif grep -q "tmpfs.*/tmp.*noexec" /etc/fstab 2>/dev/null; then
+    warn_check "/tmp noexec in fstab but not active (reboot needed)"
 else
-    warn_check "/tmp not mounted with noexec (may require reboot)"
-fi
-
-if grep -q "tmpfs.*/tmp.*noexec" /etc/fstab 2>/dev/null; then
-    pass "/tmp hardening in fstab (noexec,nosuid,nodev)"
-else
-    fail "/tmp hardening NOT in fstab"
+    # noexec on /tmp is intentionally skipped when Docker/Dokploy is the target
+    if command -v docker &>/dev/null; then
+        pass "/tmp noexec skipped (Docker/Dokploy compatibility)"
+    else
+        warn_check "/tmp noexec not configured (optional — enable manually if no Docker)"
+    fi
 fi
 
 # === USB STORAGE ===
@@ -282,7 +329,7 @@ fi
 # === AUTO UPDATES ===
 section "Automatic Updates"
 
-if dpkg -l | grep -q unattended-upgrades; then
+if dpkg -l unattended-upgrades 2>/dev/null | grep -q "^ii"; then
     pass "unattended-upgrades installed"
 else
     fail "unattended-upgrades NOT installed"
@@ -343,7 +390,7 @@ if [ -f /etc/systemd/resolved.conf.d/quad9.conf ]; then
         warn_check "DNS-over-TLS not enabled"
     fi
 
-    if grep -q "DNSSEC=yes" /etc/systemd/resolved.conf.d/quad9.conf; then
+    if grep -qE "DNSSEC=(yes|allow-downgrade)" /etc/systemd/resolved.conf.d/quad9.conf; then
         pass "DNSSEC enabled"
     else
         warn_check "DNSSEC not enabled"
@@ -476,6 +523,18 @@ if command -v docker &>/dev/null; then
         warn_check "docker-firewall.service not active -- DOCKER-USER rules may be lost after Docker restart"
     fi
 
+    if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "172.16.0.0/12"; then
+        pass "DOCKER-USER allows Docker bridge networks (172.16.0.0/12)"
+    else
+        warn_check "DOCKER-USER missing Docker bridge network rule (172.16.0.0/12)"
+    fi
+
+    if sudo ip6tables -L DOCKER-USER -n 2>/dev/null | grep -q "fd00::/8"; then
+        pass "DOCKER-USER allows Docker internal IPv6 (fd00::/8)"
+    else
+        warn_check "DOCKER-USER missing Docker internal IPv6 rule (fd00::/8)"
+    fi
+
     # === DOKPLOY / TRAEFIK (only if Docker is present) ===
     section "Dokploy / Traefik"
 
@@ -497,6 +556,19 @@ if command -v docker &>/dev/null; then
     else
         warn_check "Nothing responding on port 80/443 (normal if no app deployed yet)"
     fi
+fi
+
+# === NEEDRESTART SSH PROTECTION ===
+section "Needrestart SSH Protection"
+
+if [ -f /etc/needrestart/conf.d/99-no-ssh-restart.conf ]; then
+    if grep -q 'q(ssh)' /etc/needrestart/conf.d/99-no-ssh-restart.conf 2>/dev/null; then
+        pass "Needrestart SSH protection active (prevents SSH restart during upgrades)"
+    else
+        warn_check "Needrestart SSH config exists but may not protect SSH"
+    fi
+else
+    warn_check "Needrestart SSH protection not configured (apt upgrades may restart SSH)"
 fi
 
 # === SUMMARY ===

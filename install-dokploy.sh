@@ -22,6 +22,18 @@ if [ "$(id -u)" -ne 0 ]; then
     exec sudo bash "$0" "$@"
 fi
 
+# === AUTO-SCREEN ===
+# If not inside screen, relaunch inside screen so the script survives SSH drops.
+if [ -z "${STY:-}" ]; then
+    if command -v screen &>/dev/null; then
+        echo "Launching inside screen (reconnect with: screen -r dokploy-install)"
+        exec screen -S dokploy-install bash "$0" "$@"
+    else
+        echo "[WARN] screen not found — if SSH drops, the install will be interrupted."
+        echo "       Consider running: screen -S dokploy-install bash $0"
+    fi
+fi
+
 # === LOAD CONFIG FROM SETUP.SH ===
 CONFIG_FILE="/root/.vps_hardening_config"
 if [ ! -f "$CONFIG_FILE" ]; then
@@ -30,8 +42,24 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# shellcheck source=/dev/null
-source "$CONFIG_FILE"
+# Safe config parsing — only read expected variables (no arbitrary code execution)
+while IFS='=' read -r key value; do
+    # Skip comments and empty lines
+    [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
+    # Strip leading/trailing whitespace and quotes
+    value="${value%\"}"
+    value="${value#\"}"
+    value="${value%\'}"
+    value="${value#\'}"
+    case "$key" in
+        SSH_PORT|NEW_USER|LOG_DAYS|LOG_WEEKS|CURRENT_USER)
+            declare "$key=$value"
+            ;;
+        *)
+            echo "[WARN] Ignoring unknown config key: $key"
+            ;;
+    esac
+done < "$CONFIG_FILE"
 
 # Validate required variables
 for var in SSH_PORT NEW_USER LOG_DAYS; do
@@ -44,6 +72,12 @@ done
 # Validate SSH_PORT is a number in valid range
 if ! echo "$SSH_PORT" | grep -qE '^[0-9]+$' || [ "$SSH_PORT" -lt 1024 ] || [ "$SSH_PORT" -gt 65535 ]; then
     echo "[ERROR] Invalid SSH_PORT=$SSH_PORT in $CONFIG_FILE -- expected a number between 1024 and 65535"
+    exit 1
+fi
+
+# Validate NEW_USER format
+if ! echo "$NEW_USER" | grep -qE '^[a-z][a-z0-9_-]*$'; then
+    echo "[ERROR] Invalid NEW_USER=$NEW_USER in $CONFIG_FILE -- expected lowercase letters, numbers, underscores, hyphens"
     exit 1
 fi
 
@@ -124,6 +158,8 @@ run_with_log() {
     printf "  \033[1;34m>> %s\033[0m\n" "$label"
     local tmpfile
     tmpfile=$(mktemp) || { echo "Failed to create temp file"; return 1; }
+    # Ensure temp file is cleaned up even if script is interrupted
+    trap "rm -f '$tmpfile'; trap - RETURN" RETURN
     "$@" > "$tmpfile" 2>&1 &
     local pid=$!
     tail -f "$tmpfile" 2>/dev/null | while IFS= read -r line; do
@@ -208,7 +244,16 @@ SETUP_PHASE="docker"
 
 run_with_spinner "Installing Docker prerequisites" sudo apt-get install -y -qq ca-certificates curl gnupg
 sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
+DOCKER_GPG_TMP=$(mktemp)
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$DOCKER_GPG_TMP"
+DOCKER_FP=$(gpg --with-colons --import-options show-only --import "$DOCKER_GPG_TMP" 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
+EXPECTED_DOCKER_FP="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+if [ "$DOCKER_FP" != "$EXPECTED_DOCKER_FP" ]; then
+    rm -f "$DOCKER_GPG_TMP"
+    error "Docker GPG key fingerprint mismatch! Expected: $EXPECTED_DOCKER_FP Got: $DOCKER_FP"
+fi
+sudo gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg < "$DOCKER_GPG_TMP" 2>/dev/null
+rm -f "$DOCKER_GPG_TMP"
 sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
 echo \
@@ -233,7 +278,7 @@ fi
 sudo tee /etc/docker/daemon.json > /dev/null << EOF
 {
   "log-driver": "json-file",
-  "log-opts": {"max-size": "10m", "max-file": "$DOCKER_MAX_FILE"},
+  "log-opts": {"max-size": "10m", "max-file": "${DOCKER_MAX_FILE}"},
   "no-new-privileges": true
 }
 EOF
@@ -261,17 +306,19 @@ sudo tee /usr/local/bin/docker-firewall.sh > /dev/null << 'FWSCRIPT'
 # Port 3000 (Dokploy UI) is NOT included here: it is opened temporarily during
 # initial setup and should be closed manually after SSL is configured.
 for cmd in iptables ip6tables; do
-    $cmd -L DOCKER-USER -n &>/dev/null 2>&1 || continue
-    $cmd -F DOCKER-USER
-    $cmd -I DOCKER-USER -j DROP
-    $cmd -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
-    $cmd -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
-    $cmd -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    $cmd -I DOCKER-USER -i lo -j ACCEPT
+    "$cmd" -L DOCKER-USER -n &>/dev/null 2>&1 || continue
+    "$cmd" -F DOCKER-USER
+    "$cmd" -I DOCKER-USER -j DROP
+    "$cmd" -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
+    "$cmd" -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
+    "$cmd" -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    "$cmd" -I DOCKER-USER -i lo -j ACCEPT
 done
 # Allow Docker bridge networks (172.16.0.0/12) + overlay/Swarm networks (10.0.0.0/8)
 iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
 iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
+# Allow Docker internal IPv6 networks
+ip6tables -I DOCKER-USER -s fd00::/8 -j ACCEPT 2>/dev/null || true
 FWSCRIPT
 sudo chmod 750 /usr/local/bin/docker-firewall.sh
 
@@ -315,7 +362,20 @@ sudo apt-get install -y -qq iptables-persistent > /dev/null 2>&1
 sudo apt-mark hold ufw > /dev/null 2>&1 || true
 log "Pre-installed iptables-persistent (prevents Dokploy from flushing rules)"
 
-run_with_spinner "Installing Dokploy (~2-5 min)" bash -c 'curl -sSL https://dokploy.com/install.sh | sh'
+DOKPLOY_INSTALLER=$(mktemp)
+curl -sSL https://dokploy.com/install.sh -o "$DOKPLOY_INSTALLER"
+
+# Basic sanity check — verify this looks like the Dokploy installer
+if ! grep -qi "dokploy" "$DOKPLOY_INSTALLER"; then
+    rm -f "$DOKPLOY_INSTALLER"
+    error "Dokploy installer content looks suspicious — aborting for safety"
+fi
+
+INSTALLER_HASH=$(sha256sum "$DOKPLOY_INSTALLER" | awk '{print $1}')
+log "Dokploy installer SHA256: $INSTALLER_HASH"
+
+run_with_spinner "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
+rm -f "$DOKPLOY_INSTALLER"
 log "Dokploy installed"
 
 sudo apt-mark unhold ufw > /dev/null 2>&1 || true
@@ -330,7 +390,10 @@ if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
 fi
 
 # 2. Re-apply UFW rules (force reset removes any manual rules added after setup.sh)
-warn "UFW rules will be reset to match hardening config (any manual rules will be lost)"
+# Backup existing UFW rules before reset
+sudo cp /etc/ufw/user.rules "/etc/ufw/user.rules.bak.$(date +%s)" 2>/dev/null || true
+sudo cp /etc/ufw/user6.rules "/etc/ufw/user6.rules.bak.$(date +%s)" 2>/dev/null || true
+warn "UFW rules backed up and will be reset to match hardening config"
 sudo ufw --force reset > /dev/null
 sudo ufw default deny incoming > /dev/null
 sudo ufw default allow outgoing > /dev/null

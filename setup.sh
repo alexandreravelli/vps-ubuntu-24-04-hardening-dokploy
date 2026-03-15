@@ -40,11 +40,21 @@ fi
 
 # === CONFIGURATION ===
 CURRENT_USER="${SUDO_USER:-$(whoami)}"
-if command -v shuf &>/dev/null; then
-    SSH_PORT=$(shuf -i 50000-60000 -n 1)
-else
-    SSH_PORT=$(( (RANDOM % 10000) + 50000 ))
-fi
+MAX_PORT_ATTEMPTS=10
+for _port_try in $(seq 1 $MAX_PORT_ATTEMPTS); do
+    if command -v shuf &>/dev/null; then
+        SSH_PORT=$(shuf -i 50000-60000 -n 1)
+    else
+        SSH_PORT=$(( (RANDOM % 10000) + 50000 ))
+    fi
+    if ! ss -tlnp 2>/dev/null | grep -q ":$SSH_PORT "; then
+        break
+    fi
+    if [ "$_port_try" -eq "$MAX_PORT_ATTEMPTS" ]; then
+        echo "Could not find an available port in range 50000-60000"
+        exit 1
+    fi
+done
 LOG_FILE="/var/log/vps_setup.log"
 CONFIG_FILE="/root/.vps_hardening_config"
 TOTAL_STEPS=7
@@ -80,13 +90,32 @@ trap cleanup_on_error EXIT
 trap '' HUP PIPE
 
 # === INSTALL GUM ===
-if ! command -v gum &>/dev/null; then
+install_gum() {
     echo "Installing gum (CLI toolkit)..."
     sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://repo.charm.sh/apt/gpg.key | sudo gpg --yes --dearmor -o /etc/apt/keyrings/charm.gpg 2>/dev/null
+    local GPG_TMP
+    GPG_TMP=$(mktemp)
+    curl -fsSL https://repo.charm.sh/apt/gpg.key -o "$GPG_TMP"
+    # Verify GPG key fingerprint before trusting
+    local CHARM_FP
+    CHARM_FP=$(gpg --with-colons --import-options show-only --import "$GPG_TMP" 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')
+    local EXPECTED_FP="ED927B38BE981E53CA09153D03BBF595D4DFD35C"
+    if [ "$CHARM_FP" != "$EXPECTED_FP" ]; then
+        rm -f "$GPG_TMP"
+        echo "[ERROR] Charm GPG key fingerprint mismatch!"
+        echo "  Expected: $EXPECTED_FP"
+        echo "  Got:      $CHARM_FP"
+        echo "  The key may have been rotated. Verify at https://charm.sh and update EXPECTED_FP."
+        exit 1
+    fi
+    sudo gpg --yes --dearmor -o /etc/apt/keyrings/charm.gpg < "$GPG_TMP" 2>/dev/null
+    rm -f "$GPG_TMP"
     echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" | sudo tee /etc/apt/sources.list.d/charm.list > /dev/null
     sudo apt-get update -qq
     sudo apt-get install -y -qq gum
+}
+if ! command -v gum &>/dev/null; then
+    install_gum
 fi
 
 # === UI FUNCTIONS ===
@@ -125,6 +154,7 @@ run_with_log() {
     printf "  \033[1;34m>> %s\033[0m\n" "$label"
     local tmpfile
     tmpfile=$(mktemp) || { echo "Failed to create temp file"; return 1; }
+    trap "rm -f '$tmpfile'; trap - RETURN" RETURN
     "$@" > "$tmpfile" 2>&1 &
     local pid=$!
     tail -f "$tmpfile" 2>/dev/null | while IFS= read -r line; do
@@ -436,7 +466,7 @@ else
 fi
 
 sudo adduser --gecos "" --disabled-password "$NEW_USER"
-printf '%s:%s' "$NEW_USER" "$PASS1" | sudo chpasswd
+sudo chpasswd <<< "$NEW_USER:$PASS1"
 PASS1=""; PASS2=""
 unset PASS1 PASS2
 log "User '$NEW_USER' created with password"
@@ -534,7 +564,7 @@ if [ ! -f /swapfile ]; then
     fi
     if [ "$SWAP_SIZE_MB" -gt 0 ]; then
         SWAP_LABEL="$(( SWAP_SIZE_MB / 1024 ))GB"
-        run_with_spinner "Creating ${SWAP_LABEL} swap file" bash -c "sudo fallocate -l ${SWAP_SIZE_MB}M /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=${SWAP_SIZE_MB} status=none && sudo chmod 600 /swapfile && sudo mkswap /swapfile > /dev/null && sudo swapon /swapfile"
+        run_with_spinner "Creating ${SWAP_LABEL} swap file" bash -c "sudo fallocate -l ${SWAP_SIZE_MB}M /swapfile 2>/dev/null || { sudo rm -f /swapfile && sudo dd if=/dev/zero of=/swapfile bs=1M count=${SWAP_SIZE_MB} status=none; } && sudo chmod 600 /swapfile && sudo mkswap /swapfile > /dev/null && sudo swapon /swapfile"
         echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab > /dev/null
         if ! grep -q "vm.swappiness" /etc/sysctl.conf; then
             echo 'vm.swappiness=10' | sudo tee -a /etc/sysctl.conf > /dev/null
@@ -554,10 +584,10 @@ sudo tee /etc/systemd/resolved.conf.d/quad9.conf > /dev/null << EOF
 DNS=9.9.9.9 149.112.112.112 2620:fe::fe 2620:fe::9
 FallbackDNS=9.9.9.11 149.112.112.11 2620:fe::11 2620:fe::fe:11
 DNSOverTLS=yes
-DNSSEC=yes
+DNSSEC=allow-downgrade
 EOF
 sudo systemctl restart systemd-resolved
-log "Quad9 DNS configured with DNS-over-TLS + DNSSEC"
+log "Quad9 DNS configured with DNS-over-TLS + DNSSEC (allow-downgrade)"
 
 # === STEP 4: KERNEL HARDENING ===
 CURRENT_STEP=4
@@ -597,12 +627,11 @@ log "Kernel hardening applied"
 echo '* hard core 0' | sudo tee /etc/security/limits.d/no-core.conf > /dev/null
 log "Core dumps restricted"
 
-if ! mount | grep -q '/tmp.*noexec'; then
-    if ! grep -q '/tmp' /etc/fstab; then
-        echo 'tmpfs /tmp tmpfs defaults,noexec,nosuid,nodev,size=512M 0 0' | sudo tee -a /etc/fstab > /dev/null
-        log "/tmp hardening added to fstab (applied on next reboot)"
-    fi
-fi
+# /tmp noexec is NOT applied automatically because it breaks Docker builds
+# and Dokploy operations after every reboot. This is the intended target use case.
+# Users who don't use Docker can enable it manually:
+log "/tmp noexec skipped (incompatible with Docker/Dokploy)"
+log "To enable manually: echo 'tmpfs /tmp tmpfs defaults,noexec,nosuid,nodev,size=512M 0 0' >> /etc/fstab && reboot"
 
 echo 'install usb-storage /bin/true' | sudo tee /etc/modprobe.d/no-usb-storage.conf > /dev/null
 log "USB mass storage disabled"
@@ -754,8 +783,10 @@ port = 22,$SSH_PORT
 filter = sshd
 backend = systemd
 maxretry = 3
-bantime = 3600
+bantime = 86400
 findtime = 600
+bantime.increment = true
+bantime.factor = 2
 EOF
 sudo systemctl restart fail2ban
 log "Fail2Ban configured (ports 22 and $SSH_PORT)"
@@ -807,10 +838,10 @@ PermitUserEnvironment no
 HostbasedAuthentication no
 AllowAgentForwarding no
 MaxAuthTries 3
-MaxSessions 2
+MaxSessions 4
 LoginGraceTime 30
 X11Forwarding no
-AllowTcpForwarding no
+AllowTcpForwarding local
 ClientAliveInterval 300
 ClientAliveCountMax 2
 LogLevel VERBOSE
@@ -886,14 +917,35 @@ sudo chmod 600 "$USER_HOME/.vps_setup_summary"
 # Download post-install scripts into a dedicated subdirectory
 SCRIPTS_DIR="$USER_HOME/vps-hardening"
 sudo mkdir -p "$SCRIPTS_DIR"
-REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
+# Pin to release tag (not main) so a compromised main branch cannot inject code
+# into servers that already ran setup.sh with this version.
+REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/v${VERSION}"
+REPO_FALLBACK="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
+
 for script in cleanup.sh check.sh purge.sh install-dokploy.sh; do
-    if curl -sSL "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
+    if curl -sSL --fail "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
+        chmod +x "$SCRIPTS_DIR/$script"
+    elif curl -sSL --fail "$REPO_FALLBACK/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
+        warn "$script: tag v${VERSION} not found, downloaded from main branch"
         chmod +x "$SCRIPTS_DIR/$script"
     else
         warn "Could not download $script"
     fi
 done
+
+# Integrity check (protects against network corruption, not repo compromise)
+if curl -sSL --fail "$REPO_BASE/SHA256SUMS" -o "$SCRIPTS_DIR/SHA256SUMS" 2>/dev/null || \
+   curl -sSL --fail "$REPO_FALLBACK/SHA256SUMS" -o "$SCRIPTS_DIR/SHA256SUMS" 2>/dev/null; then
+    pushd "$SCRIPTS_DIR" > /dev/null
+    if sha256sum -c SHA256SUMS --status 2>/dev/null; then
+        log "Downloaded scripts integrity verified (SHA256)"
+    else
+        warn "Checksum mismatch — verify scripts manually before running"
+    fi
+    rm -f SHA256SUMS
+    popd > /dev/null
+fi
+
 sudo chown -R "$NEW_USER:$NEW_USER" "$SCRIPTS_DIR"
 log "Post-install scripts downloaded to $SCRIPTS_DIR"
 
@@ -903,9 +955,25 @@ log "Post-install scripts downloaded to $SCRIPTS_DIR"
 # ║  The user can CONFIRM manually later.                              ║
 # ╚════════════════════════════════════════════════════════════════════╝
 
+# Schedule auto-lockdown in 24h if CONFIRM is not completed
+# This prevents port 22 + password auth from staying open indefinitely
+if command -v at &>/dev/null; then
+    echo "if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null; then
+        sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf
+        sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
+        systemctl reload ssh 2>/dev/null || true
+        systemctl restart ssh.socket 2>/dev/null || true
+        ufw delete allow 22/tcp 2>/dev/null || true
+        sed -i 's/STATUS=pending_confirm/STATUS=auto_locked/' '$USER_HOME/.vps_setup_summary'
+        echo '[AUTO-LOCKDOWN] $(date) Port 22 closed and password auth disabled after 24h timeout' >> '$LOG_FILE'
+    fi" | at now + 24 hours 2>/dev/null || true
+    log "Auto-lockdown scheduled in 24h if CONFIRM not completed"
+fi
+
 if ! tty -s 2>/dev/null; then
     warn "Terminal lost. Setup complete but port 22 and password auth still open."
     warn "Reconnect and run the CONFIRM step manually — see $USER_HOME/.vps_setup_summary"
+    warn "Port 22 will auto-close in 24h if not confirmed."
     ELAPSED=$(( SECONDS - START_TIME ))
     log "Setup completed in $(( ELAPSED / 60 ))m $(( ELAPSED % 60 ))s (pending manual CONFIRM)"
     exit 0
@@ -950,10 +1018,10 @@ PermitUserEnvironment no
 HostbasedAuthentication no
 AllowAgentForwarding no
 MaxAuthTries 3
-MaxSessions 2
+MaxSessions 4
 LoginGraceTime 30
 X11Forwarding no
-AllowTcpForwarding no
+AllowTcpForwarding local
 ClientAliveInterval 300
 ClientAliveCountMax 2
 LogLevel VERBOSE
@@ -977,8 +1045,10 @@ port = $SSH_PORT
 filter = sshd
 backend = systemd
 maxretry = 3
-bantime = 3600
+bantime = 86400
 findtime = 600
+bantime.increment = true
+bantime.factor = 2
 EOF
         sudo systemctl restart fail2ban
 

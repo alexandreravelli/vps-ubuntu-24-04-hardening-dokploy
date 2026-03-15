@@ -85,7 +85,7 @@ Phase 3 — SSH test + CONFIRM     (interactive — if SSH drops, server is safe
 | 1 | **Server identity** | Rename server (custom hostname) + create admin user with sudo + strong password policy (12+ chars) | ~30s |
 | 2 | **SSH Key** | Paste existing key or generate ed25519 with optional passphrase | ~10s |
 | 3 | **System** | apt upgrade, auto-sized swap (2GB ≤4GB RAM / 4GB ≤16GB / skipped >16GB), Quad9 DNS-over-TLS + DNSSEC, UTC timezone | ~2-3min |
-| 4 | **Kernel** | sysctl: anti-spoofing, SYN flood, ASLR, ptrace, core dumps, /tmp hardening, USB disable | ~5s |
+| 4 | **Kernel** | sysctl: anti-spoofing, SYN flood, ASLR, ptrace, core dumps, USB disable | ~5s |
 | 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades, log retention policy | ~2-3min |
 | 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 | ~5s |
 | 7 | **SSH** | Random port 50000-60000, key-only auth, no root login | ~5s |
@@ -214,9 +214,9 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Root login disabled | `PermitRootLogin no` |
 | Key-only auth | Password auth disabled after confirmation |
 | Brute-force protection | MaxAuthTries 3, LoginGraceTime 30s |
-| Session control | ClientAliveInterval 300s, ClientAliveCountMax 2, MaxSessions 2 |
+| Session control | ClientAliveInterval 300s, ClientAliveCountMax 2, MaxSessions 4 |
 | User whitelist | `AllowUsers` restricts to admin only |
-| Forwarding disabled | X11, TCP, agent forwarding all off |
+| Forwarding restricted | X11 + agent forwarding off, TCP forwarding local only |
 | Strong ciphers | Mozilla Modern: chacha20-poly1305, aes256-gcm, curve25519 |
 | Post-quantum | `sntrup761x25519-sha512` key exchange |
 | Extra hardening | PermitEmptyPasswords no, HostbasedAuthentication no, LogLevel VERBOSE |
@@ -232,8 +232,8 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | UFW firewall | deny-by-default, allow custom SSH port + 80 + 443 |
 | DOCKER-USER chain | deny-by-default for Docker containers, allow 80 + 443 + internal networks — persisted via `docker-firewall.service` (survives Docker restarts) |
 | Rate limiting | 6 connections/30s per IP on custom SSH port |
-| Fail2Ban | 3 attempts = 1h ban (systemd backend) |
-| DNS-over-TLS | Quad9 (9.9.9.9) + DNSSEC |
+| Fail2Ban | 3 attempts = 24h ban, progressive (doubles on repeat offenders) |
+| DNS-over-TLS | Quad9 (9.9.9.9) + DNSSEC (allow-downgrade for compatibility) |
 
 </details>
 
@@ -249,7 +249,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Restricted info | dmesg + kernel pointers restricted, SysRq disabled |
 | Ptrace restriction | `yama.ptrace_scope = 1` |
 | Core dumps | Disabled (`suid_dumpable = 0` + `limits.d`) |
-| /tmp hardening | Mounted with `noexec,nosuid,nodev` |
+| /tmp hardening | Skipped by default (incompatible with Docker/Dokploy) — manual command provided for non-Docker servers |
 | USB storage | Disabled via modprobe |
 
 </details>
@@ -272,12 +272,12 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 
 | Feature | Details |
 |---------|---------|
-| Official install | APT repo with GPG, not `curl \| sh` |
+| Official install | APT repo with GPG fingerprint verification, not `curl \| sh` |
 | Docker Swarm | Initialized automatically (required for Traefik/Dokploy) |
 | Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
 | Content Trust | `DOCKER_CONTENT_TRUST=1` — image signature verification |
 | No privilege escalation | `no-new-privileges` in daemon.json |
-| DOCKER-USER firewall | deny-by-default, allow Docker bridge (172.16.0.0/12) + overlay (10.0.0.0/8) subnets |
+| DOCKER-USER firewall | deny-by-default, allow Docker bridge (172.16.0.0/12) + overlay (10.0.0.0/8) + IPv6 internal (fd00::/8) |
 | Post-install recovery | Automatically re-verifies UFW, DOCKER-USER, SSH, and needrestart after Dokploy |
 
 </details>
@@ -287,13 +287,16 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 
 | Feature | Details |
 |---------|---------|
-| Screen session | Script runs inside `screen` — survives SSH disconnection. Reconnect with `screen -r hardening` |
+| Screen session | Both scripts run inside `screen` — survives SSH disconnection. Reconnect with `screen -r hardening` or `screen -r dokploy-install` |
 | Input-first design | All questions asked before any system changes — if SSH drops during input, nothing is modified |
 | Error trap | Restores SSH access on port 22 if setup fails |
 | Config backup | `sshd_config.bak` saved before changes |
 | Summary file | `~/.vps_setup_summary` with all details (chmod 600) |
 | Double confirmation | `CONFIRM` required before closing port 22 |
 | No lockout | Password auth stays on until SSH key is verified |
+| Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
+| Supply chain | GPG fingerprint verification for Charm and Docker repos, scripts pinned to release tag (`v5.0.0`) instead of `main` |
+| Safe config parsing | `install-dokploy.sh` reads config via whitelist (no `source` / code execution) |
 | Log | Full log saved to `/var/log/vps_setup.log` |
 | Safe purge | Scripts stored in `~/vps-hardening/` — purge never touches SSH keys or home directory |
 | sshd health check | `install-dokploy.sh` verifies sshd is still alive after Dokploy install |
