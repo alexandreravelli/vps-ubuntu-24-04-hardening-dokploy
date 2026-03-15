@@ -89,7 +89,7 @@ find "$SCRIPT_DIR" -mindepth 1 -not -name "purge.sh" -exec rm -rf {} + 2>/dev/nu
 echo ""
 gum style --foreground 2 "  [OK] Setup files removed"
 gum style --foreground 240 "  Config and logs are preserved (delete manually if needed):"
-printf "    %s\n" "~/.vps_setup_summary"
+printf "    %s\n" "$HOME/.vps_setup_summary"
 printf "    %s\n" "/var/log/vps_setup.log"
 printf "    %s  (contains SSH port, username)\n" "/root/.vps_hardening_config"
 echo ""
