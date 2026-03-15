@@ -141,6 +141,7 @@ ssh your-user@your-ip -p <SSH_PORT>
 ### 2. Install Docker + Dokploy (optional)
 
 ```bash
+cd vps-hardening/
 sudo ./install-dokploy.sh
 ```
 
@@ -177,12 +178,14 @@ sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
 Interactive mode — the script lists existing users and lets you choose which one to delete:
 
 ```bash
+cd vps-hardening/
 sudo ./cleanup.sh
 ```
 
 Direct mode — deletes the specified user immediately:
 
 ```bash
+cd vps-hardening/
 sudo ./cleanup.sh ubuntu
 ```
 
@@ -191,6 +194,7 @@ sudo ./cleanup.sh ubuntu
 Checks all hardening settings and reports any misconfiguration:
 
 ```bash
+cd vps-hardening/
 sudo ./check.sh
 ```
 
@@ -199,10 +203,11 @@ sudo ./check.sh
 Once everything is verified, remove the setup scripts from the server:
 
 ```bash
+cd vps-hardening/
 sudo ./purge.sh
 ```
 
-> This deletes all script files (setup.sh, install-dokploy.sh, cleanup.sh, check.sh, purge.sh) from the server. Your config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`) is preserved.
+> This deletes the `~/vps-hardening/` directory and all scripts inside it. Your SSH keys, config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`), and home directory are preserved.
 
 ---
 

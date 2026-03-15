@@ -111,10 +111,10 @@ else
     fail "Hardening config file not found"
 fi
 
-if systemctl is-active ssh.service &>/dev/null; then
-    pass "SSH service running"
+if systemctl is-active ssh.service &>/dev/null || systemctl is-active ssh.socket &>/dev/null; then
+    pass "SSH is running"
 else
-    fail "SSH service NOT running"
+    fail "SSH is NOT running (neither ssh.service nor ssh.socket active)"
 fi
 
 if /usr/sbin/sshd -t 2>/dev/null; then
@@ -123,16 +123,11 @@ else
     fail "SSH config validation failed -- run: sudo /usr/sbin/sshd -t"
 fi
 
-if systemctl is-enabled ssh.socket &>/dev/null 2>&1; then
-    warn_check "SSH socket still enabled (should use ssh.service)"
+if [ -f /etc/systemd/system/ssh.socket.d/override.conf ]; then
+    SOCKET_PORT=$(grep "ListenStream=" /etc/systemd/system/ssh.socket.d/override.conf | tail -1)
+    pass "SSH socket reconfigured ($SOCKET_PORT)"
 else
-    pass "SSH socket disabled"
-fi
-
-if [ -f /etc/tmpfiles.d/sshd.conf ] && grep -q "/run/sshd" /etc/tmpfiles.d/sshd.conf 2>/dev/null; then
-    pass "Boot safety: /run/sshd created via tmpfiles.d"
-else
-    warn_check "/run/sshd tmpfiles.d config missing -- sshd may fail after reboot"
+    warn_check "SSH socket override not found -- may revert to port 22 after reboot"
 fi
 
 if grep -q "Ciphers" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then

@@ -52,6 +52,8 @@ cleanup_on_error() {
             printf "  \033[1;33m[!] Restoring SSH access on port 22 as a safety measure...\033[0m\n"
             sudo ufw allow 22/tcp 2>/dev/null || true
             sudo rm -f /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null || true
+            sudo rm -rf /etc/systemd/system/ssh.socket.d 2>/dev/null || true
+            sudo systemctl daemon-reload 2>/dev/null || true
             if [ -f /run/sshd-hardened.pid ]; then
                 sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
                 sudo rm -f /run/sshd-hardened.pid 2>/dev/null || true
@@ -844,12 +846,21 @@ EOF
 
 sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
 
+# Start a standalone sshd on the custom port for THIS session
 sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
 
-sudo systemctl disable ssh.socket 2>/dev/null || true
-sudo systemctl enable ssh.service 2>/dev/null || true
+# Ubuntu 24.04 uses ssh.socket as the primary SSH mechanism.
+# Instead of fighting it (which breaks SSH after reboot), reconfigure it
+# to listen on the custom port. ssh.socket triggers sshd automatically.
+sudo mkdir -p /etc/systemd/system/ssh.socket.d
+sudo tee /etc/systemd/system/ssh.socket.d/override.conf > /dev/null << EOF
+[Socket]
+ListenStream=
+ListenStream=$SSH_PORT
+EOF
+sudo systemctl daemon-reload
 
-log "SSH hardened (port 22 via socket, port $SSH_PORT via standalone sshd)"
+log "SSH hardened (port 22 via socket, port $SSH_PORT via standalone sshd, socket reconfigured for boot)"
 
 # Save user and log config for install-dokploy.sh
 {
@@ -897,17 +908,22 @@ EOF
 sudo chown "$NEW_USER:$NEW_USER" "$USER_HOME/.vps_setup_summary"
 sudo chmod 600 "$USER_HOME/.vps_setup_summary"
 
-# Download post-install scripts
+# Download post-install scripts into a dedicated subdirectory
+# IMPORTANT: scripts must NOT be in $USER_HOME directly — purge.sh deletes
+# its entire directory, which would wipe .ssh/authorized_keys if scripts
+# were placed in the home directory.
+SCRIPTS_DIR="$USER_HOME/vps-hardening"
+sudo mkdir -p "$SCRIPTS_DIR"
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
 for script in cleanup.sh check.sh purge.sh install-dokploy.sh; do
-    if curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script" 2>/dev/null; then
-        chmod +x "$USER_HOME/$script"
-        chown "$NEW_USER:$NEW_USER" "$USER_HOME/$script"
+    if curl -sSL "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
+        chmod +x "$SCRIPTS_DIR/$script"
     else
         warn "Could not download $script -- download manually after setup"
     fi
 done
-log "Post-install scripts downloaded"
+sudo chown -R "$NEW_USER:$NEW_USER" "$SCRIPTS_DIR"
+log "Post-install scripts downloaded to $SCRIPTS_DIR"
 
 if ! tty -s 2>/dev/null; then
     warn "Terminal lost (SSH session dropped). Skipping interactive CONFIRM."
@@ -975,6 +991,10 @@ KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sh
 EOF
         sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
         sudo kill -HUP "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
+
+        # Reload ssh.socket so it picks up the new port (already configured in override.conf)
+        sudo systemctl restart ssh.socket 2>/dev/null || true
+
         sudo ufw delete allow 22/tcp 2>/dev/null || true
         sudo ufw delete allow from any to any port 22 proto tcp 2>/dev/null || true
 
@@ -1084,10 +1104,11 @@ echo ""
 gum style --bold --foreground 2 "  NEXT STEPS"
 gum style --foreground 240 "  ──────────────────────────────────────────────────"
 printf "  $(gum style --bold --foreground 6 '1')  Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
-printf "  $(gum style --bold --foreground 6 '2')  Run ./install-dokploy.sh  -- install Docker + Dokploy\n"
-printf "  $(gum style --bold --foreground 6 '3')  Run ./cleanup.sh  -- remove old default user\n"
-printf "  $(gum style --bold --foreground 6 '4')  Run ./check.sh    -- verify hardening\n"
-printf "  $(gum style --bold --foreground 6 '5')  Run ./purge.sh    -- remove setup files from server\n"
+printf "  $(gum style --bold --foreground 6 '2')  cd vps-hardening/\n"
+printf "  $(gum style --bold --foreground 6 '3')  Run sudo ./install-dokploy.sh  -- install Docker + Dokploy\n"
+printf "  $(gum style --bold --foreground 6 '4')  Run sudo ./cleanup.sh  -- remove old default user\n"
+printf "  $(gum style --bold --foreground 6 '5')  Run sudo ./check.sh    -- verify hardening\n"
+printf "  $(gum style --bold --foreground 6 '6')  Run sudo ./purge.sh    -- remove setup files\n"
 echo ""
 
 printf '\a'
