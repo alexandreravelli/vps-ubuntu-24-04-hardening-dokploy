@@ -563,13 +563,15 @@ CURRENT_STEP=3
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Update system (~2-3 min)"
 SETUP_PHASE="system-update"
 
-wait_for_apt
-run_with_spinner "Updating package lists" sudo apt-get update -qq
+# Protect SSH from being restarted by needrestart BEFORE any apt operation
 sudo mkdir -p /etc/needrestart/conf.d
 sudo tee /etc/needrestart/conf.d/99-no-ssh-restart.conf > /dev/null << 'NEEDRESTART'
 $nrconf{override_rc}{q(ssh)} = 0;
 $nrconf{override_rc}{q(sshd)} = 0;
 NEEDRESTART
+
+wait_for_apt
+run_with_spinner "Updating package lists" sudo apt-get update -qq
 run_with_spinner "Upgrading packages" sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq
 log "System updated"
 
@@ -799,23 +801,10 @@ else
     log "AppArmor installed and enabled"
 fi
 
-# Fail2Ban
-sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
-[sshd]
-enabled = true
-port = 22,$SSH_PORT
-filter = sshd
-backend = systemd
-maxretry = 3
-bantime = 86400
-findtime = 600
-bantime.increment = true
-bantime.factor = 2
-EOF
-sudo systemctl restart fail2ban
-log "Fail2Ban configured (ports 22 and $SSH_PORT)"
-
 # === STEP 6: CONFIGURE FIREWALL ===
+# Firewall MUST be configured BEFORE Fail2Ban so that:
+# 1. Fail2Ban starts with a working firewall underneath
+# 2. If the script crashes between steps, the server isn't exposed
 CURRENT_STEP=6
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Configure firewall"
 SETUP_PHASE="firewall"
@@ -832,6 +821,22 @@ sudo ufw allow 80/tcp > /dev/null
 sudo ufw allow 443/tcp > /dev/null
 sudo ufw --force enable > /dev/null
 log "Firewall configured (ports: 22, $SSH_PORT, 80, 443)"
+
+# Fail2Ban (after firewall is active)
+sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
+[sshd]
+enabled = true
+port = 22,$SSH_PORT
+filter = sshd
+backend = systemd
+maxretry = 3
+bantime = 86400
+findtime = 600
+bantime.increment = true
+bantime.factor = 2
+EOF
+sudo systemctl restart fail2ban
+log "Fail2Ban configured (ports 22 and $SSH_PORT)"
 
 # === STEP 7: CONFIGURE SSH ===
 CURRENT_STEP=7
