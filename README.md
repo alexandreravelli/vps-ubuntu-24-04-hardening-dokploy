@@ -81,7 +81,7 @@ This installs Docker, configures the DOCKER-USER firewall, and deploys Dokploy (
 
 | # | Step | What happens | Time |
 |---|------|-------------|------|
-| 1 | **User** | Set hostname + create admin with sudo + strong password policy (12+ chars) | ~30s |
+| 1 | **Server identity** | Rename server (custom hostname) + create admin user with sudo + strong password policy (12+ chars) | ~30s |
 | 2 | **SSH Key** | Paste existing key or generate ed25519 with optional passphrase | ~10s |
 | 3 | **System** | apt upgrade, auto-sized swap (2GB ≤4GB RAM / 4GB ≤16GB / skipped >16GB), Quad9 DNS-over-TLS + DNSSEC, UTC timezone | ~2-3min |
 | 4 | **Kernel** | sysctl: anti-spoofing, SYN flood, ASLR, ptrace, core dumps, /tmp hardening, USB disable | ~5s |
