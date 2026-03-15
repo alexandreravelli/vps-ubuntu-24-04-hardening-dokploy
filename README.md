@@ -145,7 +145,7 @@ cd vps-hardening/
 sudo ./install-dokploy.sh
 ```
 
-> All scripts are automatically downloaded to your home directory during setup.
+> All scripts are automatically downloaded to `~/vps-hardening/` during setup.
 
 ### 3. Secure Dokploy
 
