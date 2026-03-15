@@ -1,5 +1,6 @@
 #!/bin/bash
 # Remove all setup scripts from the server after hardening is complete
+# Deletes: setup.sh, install-dokploy.sh, cleanup.sh, check.sh, purge.sh
 # Usage: sudo ./purge.sh
 set -euo pipefail
 

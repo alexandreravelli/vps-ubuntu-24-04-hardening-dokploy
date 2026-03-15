@@ -8,8 +8,8 @@
 <h1 align="center">VPS Hardening Script</h1>
 
 <p align="center">
-  <strong>Secure your Ubuntu 24.04 VPS and deploy Dokploy in minutes.</strong><br>
-  One script. 9 steps. Hardened OS + Dokploy PaaS in ~10 minutes.<br><br>
+  <strong>Secure your Ubuntu 24.04 VPS in minutes. Optionally deploy Dokploy.</strong><br>
+  Two scripts. Clean separation. Hardened OS first, then Docker + Dokploy.<br><br>
   <a href="#-quick-start">Quick Start</a> · <a href="#-requirements">Requirements</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-after-installation">After Installation</a> · <a href="#-security">Security</a> · <a href="#-faq">FAQ</a>
 </p>
 
@@ -21,6 +21,8 @@
 
 ## 🚀 Quick Start
 
+### Step 1 — Harden the server
+
 Connect to your VPS and run:
 
 ```bash
@@ -31,7 +33,19 @@ sudo -i
 curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
-> **Not root?** No worries — the script detects this and auto-escalates with `sudo`.
+This hardens the OS in 7 steps (~5 min). At the end, test your SSH connection on the new port and type `CONFIRM` to lock down.
+
+### Step 2 — Install Docker + Dokploy (optional)
+
+Reconnect on your new SSH port, then:
+
+```bash
+sudo ./install-dokploy.sh
+```
+
+This installs Docker, configures the DOCKER-USER firewall, and deploys Dokploy (~5 min).
+
+> **Not root?** No worries — both scripts detect this and auto-escalate with `sudo`.
 
 ---
 
@@ -49,18 +63,20 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 80 | TCP | HTTP / SSL certificate validation | Keep open |
 | 443 | TCP | HTTPS | Keep open |
 | 3000 | TCP | Dokploy initial setup | After configuring your domain + SSL |
-| *custom* | TCP | New SSH port (shown at end of script) | Keep open |
+| *custom* | TCP | New SSH port (shown at end of setup.sh) | Keep open |
 
-> The exact SSH port is displayed at the end of the script and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
+> The exact SSH port is displayed at the end of `setup.sh` and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
 
 ---
 
 ## ⚙️ What It Does
 
-**9 interactive steps** · **~10 minutes** · All prompts handled via an interactive CLI built on [gum](https://github.com/charmbracelet/gum) — no config files to edit
+### setup.sh — Server Hardening
+
+**7 interactive steps** · **~5 minutes** · All prompts handled via an interactive CLI built on [gum](https://github.com/charmbracelet/gum)
 
 ```
-[========            ] Step 4/9 -- Kernel hardening
+[========            ] Step 4/7 -- Kernel hardening
 ```
 
 | # | Step | What happens | Time |
@@ -70,12 +86,31 @@ curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-ha
 | 3 | **System** | apt upgrade, auto-sized swap (2GB ≤4GB RAM / 4GB ≤16GB / skipped >16GB), Quad9 DNS-over-TLS + DNSSEC, UTC timezone | ~2-3min |
 | 4 | **Kernel** | sysctl: anti-spoofing, SYN flood, ASLR, ptrace, core dumps, /tmp hardening, USB disable | ~5s |
 | 5 | **Tools** | UFW, Fail2Ban, auditd, AppArmor, unattended-upgrades, log retention policy | ~2-3min |
-| 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 + 3000 | ~5s |
+| 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 | ~5s |
 | 7 | **SSH** | Random port 50000-60000, key-only auth, no root login | ~5s |
-| 8 | **Docker** | Official APT repo + GPG + Docker Swarm + `docker-firewall.service` (DOCKER-USER deny-by-default, persisted across Docker restarts) | ~2-3min |
-| 9 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~1-2min |
 
-> ⚠️ **After step 9**, the script asks you to test your SSH connection on the new port. Only after typing `CONFIRM` will it close port 22 and disable password auth.
+> After step 7, the script asks you to test your SSH connection on the new port. Only after typing `CONFIRM` will it close port 22 and disable password auth.
+
+### install-dokploy.sh — Docker + Dokploy
+
+**3 steps** · **~5 minutes** · Run after `setup.sh` is complete and you've reconnected on the new SSH port.
+
+| # | Step | What happens | Time |
+|---|------|-------------|------|
+| 1 | **Docker** | Official APT repo + GPG + Docker Swarm + log rotation + Content Trust | ~2-3min |
+| 2 | **Firewall** | DOCKER-USER deny-by-default, allow 80 + 443 + 3000 (temporary) | ~5s |
+| 3 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~2-5min |
+
+> This script reads the config saved by `setup.sh` (`/root/.vps_hardening_config`) — no need to re-enter anything.
+
+### Why two scripts?
+
+Dokploy's installer (`curl | sh`) can interfere with firewall rules, remove UFW, and restart services unpredictably. Separating the scripts means:
+
+- **Hardening is reliable** — no third-party installer can break your SSH or firewall
+- **Dokploy is optional** — use the hardening for any purpose (Coolify, CapRover, plain Docker, or no Docker at all)
+- **Easier to debug** — if something breaks, you know which script caused it
+- **Post-install recovery** — `install-dokploy.sh` automatically re-verifies UFW, DOCKER-USER, and SSH health after Dokploy finishes
 
 <details>
 <summary><strong>🔑 SSH key options (step 2)</strong></summary>
@@ -127,6 +162,14 @@ Checks all hardening settings and reports any misconfiguration:
 sudo ./check.sh
 ```
 
+### Install Docker + Dokploy
+
+If you haven't already:
+
+```bash
+sudo ./install-dokploy.sh
+```
+
 ### Secure Dokploy
 
 1. Create your admin account at `http://your-ip:3000`
@@ -161,7 +204,7 @@ Once everything is verified, remove the setup scripts from the server:
 sudo ./purge.sh
 ```
 
-> This deletes all script files (setup.sh, cleanup.sh, check.sh, purge.sh) from the server. Your config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`) is preserved.
+> This deletes all script files (setup.sh, install-dokploy.sh, cleanup.sh, check.sh, purge.sh) from the server. Your config (`~/.vps_setup_summary`, `/var/log/vps_setup.log`) is preserved.
 
 ---
 
@@ -183,6 +226,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Forwarding disabled | X11, TCP, agent forwarding all off |
 | Strong ciphers | Mozilla Modern: chacha20-poly1305, aes256-gcm, curve25519 |
 | Extra hardening | PermitEmptyPasswords no, HostbasedAuthentication no, LogLevel VERBOSE |
+| Boot safety | `/run/sshd` created via `tmpfiles.d` (prevents privilege separation crash) |
 
 </details>
 
@@ -191,7 +235,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 
 | Feature | Details |
 |---------|---------|
-| UFW firewall | deny-by-default, allow custom SSH port + 80 + 443 + 3000 |
+| UFW firewall | deny-by-default, allow custom SSH port + 80 + 443 |
 | DOCKER-USER chain | deny-by-default for Docker containers, allow 80 + 443 + internal networks — persisted via `docker-firewall.service` (survives Docker restarts) |
 | Rate limiting | 6 connections/30s per IP on custom SSH port |
 | Fail2Ban | 3 attempts = 1h ban (systemd backend) |
@@ -224,13 +268,13 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Password policy | 12+ chars, mixed case, numbers, symbols |
 | Audit logging | sudo, auth, SSH, sudoers, kernel modules, time changes, file deletions, immutable config (`-e 2`) |
 | AppArmor | Mandatory access control |
-| Auto-updates | Daily security patches |
+| Auto-updates | Daily security patches (reboot disabled) |
 | Log retention | Configurable: 90d / 365d / 2y / custom (journald, auditd, logrotate, Docker) |
 
 </details>
 
 <details>
-<summary><strong>🐳 Docker</strong></summary>
+<summary><strong>🐳 Docker</strong> (via install-dokploy.sh)</summary>
 
 | Feature | Details |
 |---------|---------|
@@ -240,6 +284,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Content Trust | `DOCKER_CONTENT_TRUST=1` — image signature verification |
 | No privilege escalation | `no-new-privileges` in daemon.json |
 | DOCKER-USER firewall | deny-by-default, allow Docker bridge (172.16.0.0/12) + overlay (10.0.0.0/8) subnets |
+| Post-install recovery | Automatically re-verifies UFW, DOCKER-USER, SSH, and needrestart after Dokploy |
 
 </details>
 
@@ -254,6 +299,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Double confirmation | `CONFIRM` required before closing port 22 |
 | No lockout | Password auth stays on until SSH key is verified |
 | Log | Full log saved to `/var/log/vps_setup.log` |
+| sshd health check | `install-dokploy.sh` verifies sshd is still alive after Dokploy install |
 
 </details>
 
@@ -300,7 +346,13 @@ The script is designed for fresh installs. Use `check.sh` to verify your server'
 <details>
 <summary><strong>Can I skip Dokploy?</strong></summary>
 
-Yes. Comment out step 9 in `setup.sh` and remove port 3000 from the firewall rules.
+Yes — just don't run `install-dokploy.sh`. The hardening in `setup.sh` works standalone for any use case.
+</details>
+
+<details>
+<summary><strong>Can I use Coolify / CapRover instead of Dokploy?</strong></summary>
+
+Yes. Run `setup.sh` for hardening, then install your preferred PaaS manually. The DOCKER-USER firewall setup in `install-dokploy.sh` can serve as a reference for configuring Docker networking securely.
 </details>
 
 <details>
@@ -315,7 +367,8 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 
 | File | Purpose |
 |------|---------|
-| `setup.sh` | Main hardening script (interactive CLI) |
+| `setup.sh` | Server hardening (7 steps, standalone) |
+| `install-dokploy.sh` | Docker + Dokploy installer (run after setup.sh) |
 | `cleanup.sh` | Remove the default user |
 | `check.sh` | Post-install security audit |
 | `purge.sh` | Remove setup files from server |
@@ -327,7 +380,7 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 
 1. Fork the repo
 2. Create a feature branch
-3. Make sure `shellcheck -S warning setup.sh cleanup.sh check.sh purge.sh` passes
+3. Make sure `shellcheck -S warning setup.sh install-dokploy.sh cleanup.sh check.sh purge.sh` passes
 4. Open a PR using the provided template
 
 ---

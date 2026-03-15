@@ -1,12 +1,15 @@
 #!/bin/bash
 # VPS Hardening Script - Simple & Reliable
-# Ubuntu 24.04 LTS + Dokploy
+# Ubuntu 24.04 LTS
 # https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy
 # Usage: sudo bash setup.sh
+#
+# This script handles ONLY server hardening (steps 1-7).
+# After hardening, run install-dokploy.sh to install Docker + Dokploy.
 
 set -euo pipefail
 
-VERSION="3.0.0"
+VERSION="4.0.0"
 
 # === VERSION FLAG ===
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
@@ -22,7 +25,6 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # === CONFIGURATION ===
-# Capture the invoking user before sudo escalation (needed for cleanup step)
 CURRENT_USER="${SUDO_USER:-$(whoami)}"
 if command -v shuf &>/dev/null; then
     SSH_PORT=$(shuf -i 50000-60000 -n 1)
@@ -31,7 +33,7 @@ else
 fi
 LOG_FILE="/var/log/vps_setup.log"
 CONFIG_FILE="/root/.vps_hardening_config"
-TOTAL_STEPS=9
+TOTAL_STEPS=7
 CURRENT_STEP=0
 
 # === CLEANUP TRAP (pre-gum safe) ===
@@ -45,15 +47,11 @@ cleanup_on_error() {
         printf "  Check the log: %s\n" "$LOG_FILE"
         printf "  \033[1;31m──────────────────────────────────────────────\033[0m\n"
 
-        if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ] || [ "$SETUP_PHASE" = "docker" ] || [ "$SETUP_PHASE" = "dokploy" ]; then
+        if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ]; then
             echo ""
             printf "  \033[1;33m[!] Restoring SSH access on port 22 as a safety measure...\033[0m\n"
             sudo ufw allow 22/tcp 2>/dev/null || true
-            # Remove hardening config drop-in so ssh.socket continues serving port 22 unchanged.
-            # Do NOT restart or reload ssh -- ssh.socket is still running and the current session
-            # is still alive. Touching the socket would kill all active connections.
             sudo rm -f /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null || true
-            # Kill standalone sshd if it was started
             if [ -f /run/sshd-hardened.pid ]; then
                 sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
                 sudo rm -f /run/sshd-hardened.pid 2>/dev/null || true
@@ -63,8 +61,6 @@ cleanup_on_error() {
     fi
 }
 trap cleanup_on_error EXIT
-# Ignore SIGHUP (SSH session drop) and SIGPIPE (writing to closed terminal fd)
-# so the script continues even if the connection is lost mid-install
 trap '' HUP PIPE
 
 # === INSTALL GUM ===
@@ -98,34 +94,30 @@ progress_bar() {
 run_with_spinner() {
     local label="$1"
     shift
-    sudo -v 2>/dev/null || true  # Refresh sudo token to prevent timeout during long operations
+    sudo -v 2>/dev/null || true
     if tty -s 2>/dev/null; then
         gum spin --spinner dot --title "$label" -- "$@"
     else
-        # No TTY (SSH dropped) -- run silently, log only
         "$@" > /dev/null 2>&1
     fi
 }
 
 run_with_log() {
-    # Runs a command while streaming its output live.
     local label="$1"
     shift
-    sudo -v 2>/dev/null || true  # Refresh sudo token to prevent timeout during long operations
+    sudo -v 2>/dev/null || true
     printf "  \033[1;34m>> %s\033[0m\n" "$label"
     local tmpfile
     tmpfile=$(mktemp) || { echo "Failed to create temp file"; return 1; }
-    # Run command, capture exit code, then display output (avoids tail race condition)
     "$@" > "$tmpfile" 2>&1 &
     local pid=$!
-    # Stream output in real time using a background tail
     tail -f "$tmpfile" 2>/dev/null | while IFS= read -r line; do
         printf "  \033[0;90m   %s\033[0m\n" "$line"
     done &
     local tail_pid=$!
     wait "$pid"
     local exit_code=$?
-    sleep 1  # Allow tail to flush remaining output
+    sleep 1
     kill "$tail_pid" 2>/dev/null; wait "$tail_pid" 2>/dev/null || true
     rm -f "$tmpfile"
     return "$exit_code"
@@ -168,7 +160,6 @@ copy_block() {
 # === WELCOME SCREEN ===
 clear 2>/dev/null || true
 
-# Title box
 gum style \
     --border double \
     --border-foreground 4 \
@@ -178,12 +169,11 @@ gum style \
     --align center \
     "VPS HARDENING SCRIPT" \
     "" \
-    "Ubuntu 24.04 LTS + Dokploy" \
-    "~10 min  ·  9 steps"
+    "Ubuntu 24.04 LTS" \
+    "~5 min  ·  7 steps"
 
 echo ""
 
-# Steps section
 gum style --bold --foreground 6 "  WHAT IT DOES"
 gum style --foreground 240 "  ────────────────────────────────────────────────"
 echo ""
@@ -192,14 +182,10 @@ printf "  $(gum style --foreground 240 '2')  Configure SSH key (ed25519 + passph
 printf "  $(gum style --foreground 240 '3')  Update system, auto-sized swap, DNS-over-TLS\n"
 printf "  $(gum style --foreground 240 '4')  Kernel hardening: anti-spoofing, ASLR, SYN\n"
 printf "  $(gum style --foreground 240 '5')  Install UFW · Fail2Ban · AppArmor · auditd · log retention\n"
-printf "  $(gum style --foreground 240 '6')  Firewall: deny-by-default, allow 80/443/3000\n"
-echo ""
+printf "  $(gum style --foreground 240 '6')  Firewall: deny-by-default, allow custom SSH + 80 + 443\n"
 printf "  $(gum style --foreground 240 '7')  SSH: random port 50000-60000, key-only auth\n"
-printf "  $(gum style --foreground 240 '8')  Docker: official APT repo + GPG + Swarm + DOCKER-USER firewall\n"
-printf "  $(gum style --foreground 240 '9')  Dokploy: self-hosted PaaS at port 3000\n"
 echo ""
 
-# Prerequisites section
 gum style --bold --foreground 2 "  PREREQUISITES"
 gum style --foreground 240 "  ────────────────────────────────────────────────"
 echo ""
@@ -208,12 +194,10 @@ printf "  $(gum style --foreground 2 '✓')  User with sudo privileges\n"
 printf "  $(gum style --foreground 2 '✓')  SSH public key (ed25519) — or generate one\n"
 echo ""
 
-# Server specs section
 gum style --bold --foreground 6 "  SERVER SPECS"
 gum style --foreground 240 "  ────────────────────────────────────────────────"
 echo ""
 
-# Gather server info
 SPEC_OS=$(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || echo "Unknown")
 SPEC_KERNEL=$(uname -r)
 SPEC_CPU=$(nproc 2>/dev/null || echo "?")
@@ -232,7 +216,6 @@ printf "  %-12s %s\n" "IPv4" "$SPEC_IPV4"
 printf "  %-12s %s\n" "IPv6" "$SPEC_IPV6"
 echo ""
 
-# Cloud provider detection (metadata endpoint = external firewall likely exists)
 HAS_CLOUD_FIREWALL=false
 if curl -s --max-time 2 -H "Metadata-Flavor: Google" http://169.254.169.254/computeMetadata/v1/ &>/dev/null; then
     HAS_CLOUD_FIREWALL=true
@@ -246,7 +229,6 @@ elif grep -qi "digitalocean\|vultr" /sys/class/dmi/id/board_vendor 2>/dev/null; 
     HAS_CLOUD_FIREWALL=true
 fi
 
-# Firewall warning box
 if [ "$HAS_CLOUD_FIREWALL" = true ]; then
     gum style \
         --border rounded \
@@ -260,7 +242,6 @@ if [ "$HAS_CLOUD_FIREWALL" = true ]; then
         "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
         "$(printf '  %5s        HTTP' '80')" \
         "$(printf '  %5s        HTTPS' '443')" \
-        "$(printf '  %5s        Dokploy (temporary — close after SSL)' '3000')" \
         "$(printf '  %5s        SSH (custom port for this install)' "$SSH_PORT")"
 else
     gum style \
@@ -275,7 +256,6 @@ else
         "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
         "$(printf '  %5s        HTTP' '80')" \
         "$(printf '  %5s        HTTPS' '443')" \
-        "$(printf '  %5s        Dokploy (temporary — close after SSL)' '3000')" \
         "" \
         "The final custom SSH port will be shown at the end."
 fi
@@ -368,7 +348,6 @@ while true; do
 
     printf '%s:%s' "$NEW_USER" "$PASS1" | sudo chpasswd && break
 done
-# Clear sensitive variables from memory
 PASS1=""; PASS2=""
 unset PASS1 PASS2
 log "Password set"
@@ -387,7 +366,6 @@ SSH_METHOD=$(gum choose --header "How would you like to configure SSH?" \
 
 if [[ "$SSH_METHOD" == *"Generate"* ]]; then
 
-    # Optional passphrase
     KEY_PASSPHRASE=""
     if gum confirm "Protect the key with a passphrase? (adds extra security)"; then
         input_banner "Choose a passphrase for your SSH key"
@@ -451,7 +429,6 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         gum confirm --prompt.foreground 6 "I have saved the private key now" || error "Cannot continue without saving the private key"
     }
 
-    # Securely delete private key -- shred overwrites file contents before deleting
     shred -u "$TEMP_KEY_PATH" 2>/dev/null || rm -f "$TEMP_KEY_PATH"
     rm -f "$TEMP_KEY_PATH.pub"
     rmdir "$TEMP_KEY_DIR" 2>/dev/null || true
@@ -475,7 +452,6 @@ else
     sudo chmod 700 "/home/$NEW_USER/.ssh"
     sudo chmod 600 "/home/$NEW_USER/.ssh/authorized_keys"
     sudo chown -R "$NEW_USER:$NEW_USER" "/home/$NEW_USER/.ssh"
-    # Clear sensitive variable from memory
     SSH_KEY=""
     unset SSH_KEY
     log "SSH key configured"
@@ -487,8 +463,6 @@ progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Update system (~2-3 min)"
 SETUP_PHASE="system-update"
 
 run_with_spinner "Updating package lists" sudo apt-get update -qq
-# Prevent apt/needrestart from restarting SSH during upgrade -- would kill the active session.
-# openssh-server post-install calls systemctl restart ssh which stops ssh.socket and kills connections.
 sudo mkdir -p /etc/needrestart/conf.d
 sudo tee /etc/needrestart/conf.d/99-no-ssh-restart.conf > /dev/null << 'NEEDRESTART'
 # Do not auto-restart sshd during package upgrades (would kill active SSH sessions)
@@ -502,7 +476,6 @@ sudo timedatectl set-timezone UTC
 log "Timezone set to UTC"
 
 if [ ! -f /swapfile ]; then
-    # Scale swap to RAM: ≤4GB → 2GB swap, 4-16GB → 4GB swap, >16GB → skip (enough RAM for Docker/PaaS)
     TOTAL_MEM_MB=$(free -m | awk '/^Mem:/{print $2}')
     if [ "$TOTAL_MEM_MB" -le 4096 ]; then
         SWAP_SIZE_MB=2048
@@ -601,11 +574,9 @@ EOF
 run_with_spinner "Applying kernel parameters" sudo sysctl --system
 log "Kernel hardening applied"
 
-# Core dump restriction
 echo '* hard core 0' | sudo tee /etc/security/limits.d/no-core.conf > /dev/null
 log "Core dumps restricted"
 
-# /tmp hardening (noexec,nosuid,nodev) via tmpfs
 if ! mount | grep -q '/tmp.*noexec'; then
     if ! grep -q '/tmp' /etc/fstab; then
         echo 'tmpfs /tmp tmpfs defaults,noexec,nosuid,nodev,size=512M 0 0' | sudo tee -a /etc/fstab > /dev/null
@@ -613,7 +584,6 @@ if ! mount | grep -q '/tmp.*noexec'; then
     fi
 fi
 
-# Disable USB mass storage (headless VPS)
 echo 'install usb-storage /bin/true' | sudo tee /etc/modprobe.d/no-usb-storage.conf > /dev/null
 log "USB mass storage disabled"
 
@@ -628,7 +598,7 @@ log "Security tools installed"
 
 # === LOG RETENTION POLICY ===
 input_banner "Choose a log retention policy for your server"
-printf "  \033[0;90mAffected logs: auditd, journald, Fail2Ban, UFW, syslog, auth.log, Docker\033[0m\n"
+printf "  \033[0;90mAffected logs: auditd, journald, Fail2Ban, UFW, syslog, auth.log\033[0m\n"
 echo ""
 
 LOG_RETENTION_CHOICE=$(gum choose \
@@ -657,11 +627,9 @@ case "$LOG_RETENTION_CHOICE" in
         ;;
 esac
 
-# Convert days to weeks for logrotate
 LOG_WEEKS=$(( LOG_DAYS / 7 ))
 [ "$LOG_WEEKS" -lt 1 ] && LOG_WEEKS=1
 
-# journald retention
 sudo mkdir -p /etc/systemd/journald.conf.d
 sudo tee /etc/systemd/journald.conf.d/retention.conf > /dev/null << EOF
 [Journal]
@@ -671,7 +639,6 @@ EOF
 sudo systemctl restart systemd-journald
 log "journald retention set to ${LOG_DAYS} days"
 
-# auditd retention: scale num_logs based on retention
 AUDIT_NUM_LOGS=$(( LOG_DAYS / 7 ))
 [ "$AUDIT_NUM_LOGS" -lt 5 ] && AUDIT_NUM_LOGS=5
 [ "$AUDIT_NUM_LOGS" -gt 99 ] && AUDIT_NUM_LOGS=99
@@ -679,7 +646,6 @@ sudo sed -i "s/^num_logs.*/num_logs = $AUDIT_NUM_LOGS/" /etc/audit/auditd.conf
 sudo sed -i "s/^max_log_file_action.*/max_log_file_action = ROTATE/" /etc/audit/auditd.conf
 log "auditd retention configured ($AUDIT_NUM_LOGS rotated log files)"
 
-# logrotate: UFW
 sudo tee /etc/logrotate.d/ufw-custom > /dev/null << EOF
 /var/log/ufw.log {
     weekly
@@ -692,7 +658,6 @@ sudo tee /etc/logrotate.d/ufw-custom > /dev/null << EOF
 }
 EOF
 
-# logrotate: rsyslog (syslog + auth.log)
 sudo tee /etc/logrotate.d/rsyslog-custom > /dev/null << EOF
 /var/log/syslog
 /var/log/auth.log {
@@ -710,7 +675,6 @@ sudo tee /etc/logrotate.d/rsyslog-custom > /dev/null << EOF
 }
 EOF
 
-# logrotate: Fail2Ban
 sudo tee /etc/logrotate.d/fail2ban-custom > /dev/null << EOF
 /var/log/fail2ban.log {
     weekly
@@ -726,7 +690,6 @@ sudo tee /etc/logrotate.d/fail2ban-custom > /dev/null << EOF
 }
 EOF
 
-# Save retention to config
 echo "LOG_RETENTION_DAYS=$LOG_DAYS" | sudo tee -a "$CONFIG_FILE" > /dev/null
 log "Log retention policy configured (${LOG_DAYS} days)"
 
@@ -830,9 +793,8 @@ sudo ufw allow 22/tcp > /dev/null
 sudo ufw allow "$SSH_PORT/tcp" > /dev/null
 sudo ufw allow 80/tcp > /dev/null
 sudo ufw allow 443/tcp > /dev/null
-sudo ufw allow 3000/tcp > /dev/null
 sudo ufw --force enable > /dev/null
-log "Firewall configured (ports: 22, $SSH_PORT, 80, 443, 3000)"
+log "Firewall configured (ports: 22, $SSH_PORT, 80, 443)"
 
 # === STEP 7: CONFIGURE SSH ===
 CURRENT_STEP=7
@@ -841,23 +803,17 @@ SETUP_PHASE="ssh"
 
 sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
-# Validate sshd binary is available before making any config changes
 [ -x /usr/sbin/sshd ] || error "sshd binary not found at /usr/sbin/sshd -- is openssh-server installed?"
 
-# Ubuntu 24.04 uses ssh.socket which ties active sessions to the socket unit.
-# Stopping or restarting the socket kills all active sessions (PartOf= dependency).
-# Solution: never touch ssh.socket -- start a standalone sshd on $SSH_PORT instead.
-# The socket stays alive for the current session; the standalone sshd opens the new port.
-# ssh.socket is only disabled for next boot; ssh.service takes over after reboot.
+# Ensure /run/sshd exists at every boot (required for privilege separation)
+echo "d /run/sshd 0755 root root -" | sudo tee /etc/tmpfiles.d/sshd.conf > /dev/null
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/sshd.conf 2>/dev/null || sudo mkdir -p /run/sshd
 
-# Clean up any leftover pid from a previous failed run
 if [ -f /run/sshd-hardened.pid ]; then
     sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
     sudo rm -f /run/sshd-hardened.pid
 fi
 
-# AllowUsers is intentionally omitted here -- added only after the new connection is verified
-# so the current user can still reconnect on port 22 if something goes wrong before CONFIRM
 sudo mkdir -p /etc/ssh/sshd_config.d
 sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port 22
@@ -885,213 +841,46 @@ MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
 KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
 EOF
 
-# Validate config
 sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
 
-# Start a standalone sshd ONLY on $SSH_PORT
-# -p overrides all Port directives so it only binds to $SSH_PORT, not port 22
-# This does not affect ssh.socket or the current session in any way
 sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
 
-# Prepare for next reboot: ssh.socket off, ssh.service on
-# (takes effect after reboot -- we do NOT stop the socket now)
 sudo systemctl disable ssh.socket 2>/dev/null || true
 sudo systemctl enable ssh.service 2>/dev/null || true
 
 log "SSH hardened (port 22 via socket, port $SSH_PORT via standalone sshd)"
 
-# === STEP 8: INSTALL DOCKER ===
-CURRENT_STEP=8
-progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Docker (~2-3 min)"
-SETUP_PHASE="docker"
-
-run_with_spinner "Installing Docker prerequisites" sudo apt-get install -y -qq ca-certificates curl gnupg
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --yes --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-run_with_spinner "Updating Docker repository" sudo apt-get update -qq
-run_with_log "Installing Docker Engine" sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker "$NEW_USER"
-# Enable Docker Content Trust (image signature verification)
-echo 'export DOCKER_CONTENT_TRUST=1' | sudo tee /etc/profile.d/docker-content-trust.sh > /dev/null
-log "Docker installed (official APT repo with GPG, content trust enabled)"
-
-sudo mkdir -p /etc/docker
-# Scale Docker log files to retention policy
-if [ "$LOG_DAYS" -le 90 ]; then
-    DOCKER_MAX_FILE=3
-elif [ "$LOG_DAYS" -le 365 ]; then
-    DOCKER_MAX_FILE=7
-else
-    DOCKER_MAX_FILE=14
-fi
-sudo tee /etc/docker/daemon.json > /dev/null << EOF
+# Save user and log config for install-dokploy.sh
 {
-  "log-driver": "json-file",
-  "log-opts": {"max-size": "10m", "max-file": "$DOCKER_MAX_FILE"},
-  "no-new-privileges": true
-}
-EOF
-sudo systemctl restart docker
-log "Docker log rotation configured"
-
-# Initialize Docker Swarm (required for Dokploy/Traefik)
-if ! sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
-    # Use the IP of the default route interface (works behind NAT on AWS/GCP/Oracle Cloud)
-    # Swarm needs a local interface IP, not the public NAT IP from ifconfig.me
-    SWARM_ADDR=$(ip -4 route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1 || true)
-    [ -n "$SWARM_ADDR" ] || error "Could not determine local IP for Docker Swarm -- check network connectivity"
-    run_with_spinner "Initializing Docker Swarm" sudo docker swarm init --advertise-addr "$SWARM_ADDR"
-    log "Docker Swarm initialized (required for Traefik)"
-else
-    log "Docker Swarm already active"
-fi
-
-# Docker firewall: deny-by-default on DOCKER-USER, allow only needed ports.
-# We use a systemd service instead of iptables-persistent because ufw and
-# iptables-persistent conflict on Ubuntu 24.04 (installing one removes the other).
-# The service re-applies rules after every Docker restart (which flushes DOCKER-USER).
-
-sudo tee /usr/local/bin/docker-firewall.sh > /dev/null << 'FWSCRIPT'
-#!/bin/bash
-# Persistent DOCKER-USER rules -- re-applied after Docker starts on each boot.
-# Port 3000 (Dokploy UI) is NOT included here: it is opened temporarily during
-# initial setup and should be closed manually after SSL is configured.
-for cmd in iptables ip6tables; do
-    $cmd -L DOCKER-USER -n &>/dev/null 2>&1 || continue
-    $cmd -F DOCKER-USER
-    $cmd -I DOCKER-USER -j DROP
-    $cmd -I DOCKER-USER -p tcp --dport 443 -j ACCEPT
-    $cmd -I DOCKER-USER -p tcp --dport 80 -j ACCEPT
-    $cmd -I DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    $cmd -I DOCKER-USER -i lo -j ACCEPT
-done
-# Allow Docker bridge networks (172.16.0.0/12) + overlay/Swarm networks (10.0.0.0/8)
-# IPv4 only -- these subnets are not valid for ip6tables
-iptables -I DOCKER-USER -s 172.16.0.0/12 -j ACCEPT
-iptables -I DOCKER-USER -s 10.0.0.0/8 -j ACCEPT
-FWSCRIPT
-sudo chmod 750 /usr/local/bin/docker-firewall.sh
-
-sudo tee /etc/systemd/system/docker-firewall.service > /dev/null << 'FWSERVICE'
-[Unit]
-Description=Docker DOCKER-USER firewall rules
-After=docker.service
-Requires=docker.service
-BindsTo=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/docker-firewall.sh
-ExecReload=/usr/local/bin/docker-firewall.sh
-
-[Install]
-WantedBy=multi-user.target
-FWSERVICE
-
-sudo systemctl daemon-reload
-sudo systemctl enable docker-firewall
-run_with_spinner "Configuring DOCKER-USER firewall rules" sudo systemctl start docker-firewall
-
-# Port 3000 is temporary (initial setup only) -- added outside the persistent script
-sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
-sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-log "Docker firewall configured (DOCKER-USER: deny-by-default, allow 80, 443, 3000)"
-
-# === STEP 9: INSTALL DOKPLOY ===
-CURRENT_STEP=9
-progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Dokploy (~2-5 min)"
-SETUP_PHASE="dokploy"
-
-# Pre-install iptables-persistent BEFORE Dokploy so its installer finds it
-# already present and skips the install (which would otherwise flush all rules
-# and conflict with UFW, killing the SSH session).
-echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections
-echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections
-sudo apt-get install -y -qq iptables-persistent > /dev/null 2>&1
-sudo apt-mark hold ufw > /dev/null 2>&1 || true
-log "Pre-installed iptables-persistent (prevents Dokploy from flushing rules)"
-
-run_with_spinner "Installing Dokploy (~2-5 min)" bash -c 'curl -sSL https://dokploy.com/install.sh | sh'
-log "Dokploy installed"
-
-sudo apt-mark unhold ufw > /dev/null 2>&1 || true
-
-# If Dokploy managed to remove UFW despite the hold, reinstall it
-if ! dpkg -l ufw 2>/dev/null | grep -q "^ii"; then
-    run_with_spinner "Reinstalling UFW (removed by Dokploy)" sudo apt-get install -y -qq ufw
-fi
-# Re-apply UFW rules (Dokploy may have reset them even if UFW wasn't removed)
-sudo ufw --force reset > /dev/null
-sudo ufw default deny incoming > /dev/null
-sudo ufw default allow outgoing > /dev/null
-sudo ufw allow 22/tcp > /dev/null
-sudo ufw allow "$SSH_PORT/tcp" > /dev/null
-sudo ufw allow 80/tcp > /dev/null
-sudo ufw allow 443/tcp > /dev/null
-sudo ufw allow 3000/tcp > /dev/null
-sudo ufw --force enable > /dev/null
-log "UFW rules reconfigured after Dokploy (port 22 kept open until CONFIRM)"
-
-# Re-apply needrestart SSH protection (Dokploy install may have altered it)
-sudo mkdir -p /etc/needrestart/conf.d
-sudo tee /etc/needrestart/conf.d/99-no-ssh-restart.conf > /dev/null << 'NEEDRESTART'
-$nrconf{override_rc}{q(ssh)} = 0;
-$nrconf{override_rc}{q(sshd)} = 0;
-NEEDRESTART
-
-# Re-apply DOCKER-USER rules via the systemd service (Dokploy may have restarted Docker)
-run_with_spinner "Re-applying DOCKER-USER firewall rules" sudo systemctl restart docker-firewall
-# Re-add port 3000 (temporary -- flushed by service restart)
-sudo iptables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT
-sudo ip6tables -I DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true
-
-gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '
-for i in $(seq 1 30); do
-    curl -s http://localhost:3000 &>/dev/null && exit 0
-    sleep 2
-done
-exit 1
-' && log "Dokploy is running" || warn "Dokploy did not respond within 60s -- it may still be starting"
-
-# === DOWNLOAD POST-INSTALL SCRIPTS ===
-REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
-USER_HOME=$(getent passwd "$NEW_USER" | cut -d: -f6)
-[ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || error "Cannot find home directory for user '$NEW_USER'"
-for script in cleanup.sh check.sh purge.sh; do
-    if curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script" 2>/dev/null; then
-        chmod +x "$USER_HOME/$script"
-        chown "$NEW_USER:$NEW_USER" "$USER_HOME/$script"
-    else
-        warn "Could not download $script -- download manually after setup"
-    fi
-done
-log "Post-install scripts downloaded (cleanup.sh, check.sh, purge.sh)"
+    echo "NEW_USER=$NEW_USER"
+    echo "LOG_DAYS=$LOG_DAYS"
+    echo "LOG_WEEKS=$LOG_WEEKS"
+    echo "CURRENT_USER=$CURRENT_USER"
+} | sudo tee -a "$CONFIG_FILE" > /dev/null
 
 # === TEST SSH CONNECTION ===
 progress_bar "$TOTAL_STEPS" "$TOTAL_STEPS" "All steps completed"
 SETUP_PHASE="ssh-test"
 
-# Try IPv4 first; fall back to IPv6 (brackets added below for SSH syntax); last resort: UNKNOWN
 PUBLIC_IP=$(curl -s --max-time 10 -4 ifconfig.me 2>/dev/null || \
             curl -s --max-time 10 https://api.ipify.org 2>/dev/null || \
             curl -s --max-time 10 -6 ifconfig.me 2>/dev/null || \
-            echo "UNKNOWN")
-# Wrap IPv6 addresses in brackets for valid SSH syntax (ssh user@[ipv6] -p port)
+            echo "")
+
+if [ -z "$PUBLIC_IP" ]; then
+    warn "Could not detect public IP -- use your provider's dashboard to find it"
+    PUBLIC_IP="YOUR_SERVER_IP"
+fi
+
 if echo "$PUBLIC_IP" | grep -q ":"; then
     SSH_HOST="[$PUBLIC_IP]"
 else
     SSH_HOST="$PUBLIC_IP"
 fi
 
-# Write summary file early so it exists even if the session drops before CONFIRM
+USER_HOME=$(getent passwd "$NEW_USER" | cut -d: -f6)
+[ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || error "Cannot find home directory for user '$NEW_USER'"
+
 sudo tee "$USER_HOME/.vps_setup_summary" > /dev/null << EOF
 # VPS Setup Summary - $(date +%Y-%m-%d)
 # Generated by VPS Hardening Script v$VERSION
@@ -1099,7 +888,6 @@ HOSTNAME=$(hostname)
 HOST=$PUBLIC_IP
 USER=$NEW_USER
 SSH_PORT=$SSH_PORT
-DOKPLOY_URL=http://$PUBLIC_IP:3000
 SSH_CMD=ssh $NEW_USER@$SSH_HOST -p $SSH_PORT
 LOG_RETENTION=${LOG_DAYS}_days
 LOG_FILE=$LOG_FILE
@@ -1107,14 +895,23 @@ STATUS=pending_confirm
 EOF
 sudo chown "$NEW_USER:$NEW_USER" "$USER_HOME/.vps_setup_summary"
 sudo chmod 600 "$USER_HOME/.vps_setup_summary"
-log "Setup summary saved to $USER_HOME/.vps_setup_summary"
 
-# Check if terminal is still available (SSH session may have dropped during Dokploy install)
+# Download post-install scripts
+REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
+for script in cleanup.sh check.sh purge.sh install-dokploy.sh; do
+    if curl -sSL "$REPO_BASE/$script" -o "$USER_HOME/$script" 2>/dev/null; then
+        chmod +x "$USER_HOME/$script"
+        chown "$NEW_USER:$NEW_USER" "$USER_HOME/$script"
+    else
+        warn "Could not download $script -- download manually after setup"
+    fi
+done
+log "Post-install scripts downloaded"
+
 if ! tty -s 2>/dev/null; then
     warn "Terminal lost (SSH session dropped). Skipping interactive CONFIRM."
     warn "Run the final hardening manually -- see $USER_HOME/.vps_setup_summary"
     log "Setup completed without CONFIRM (terminal lost). Port 22 and password auth still open."
-    # Jump to final summary (non-interactive)
     ELAPSED=$(( SECONDS - START_TIME ))
     ELAPSED_MIN=$(( ELAPSED / 60 ))
     ELAPSED_SEC=$(( ELAPSED % 60 ))
@@ -1175,14 +972,8 @@ Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
 KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
 EOF
-        # Validate config
         sudo /usr/sbin/sshd -t || error "SSH config validation failed -- not applying"
-        # Reload standalone sshd config with SIGHUP -- applies new AllowUsers/PasswordAuthentication
-        # to new connections without dropping existing sessions (sshd forks per connection)
         sudo kill -HUP "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
-        # Block port 22 at firewall level -- ssh.socket keeps running but nothing can reach it
-        # It will stop permanently on next reboot (disabled in step 7)
-        # Delete both IPv4 and IPv6 rules (ufw adds them separately)
         sudo ufw delete allow 22/tcp 2>/dev/null || true
         sudo ufw delete allow from any to any port 22 proto tcp 2>/dev/null || true
 
@@ -1198,11 +989,9 @@ findtime = 600
 EOF
         sudo systemctl restart fail2ban
 
-        # Order matters: add LIMIT rule first, then remove ALLOW to avoid a gap in coverage
         sudo ufw limit "$SSH_PORT/tcp" > /dev/null
         sudo ufw delete allow "$SSH_PORT/tcp" > /dev/null
 
-        # Update summary status
         sudo sed -i 's/STATUS=pending_confirm/STATUS=complete/' "$USER_HOME/.vps_setup_summary"
         log "Port 22 closed, password auth disabled, rate limiting enabled"
     else
@@ -1281,14 +1070,13 @@ gum style \
     --margin "0 2" \
     --bold \
     --align center \
-    "SERVER READY  (${ELAPSED_MIN}m ${ELAPSED_SEC}s)"
+    "HARDENING COMPLETE  (${ELAPSED_MIN}m ${ELAPSED_SEC}s)"
 
 echo ""
 gum style --bold --foreground 2 "  CONNECT"
 gum style --foreground 240 "  ──────────────────────────────────────────────────"
 printf "  $(gum style --bold 'Host')     %s\n" "$(hostname)"
 printf "  $(gum style --bold 'SSH')      ssh %s@%s -p %s\n" "$NEW_USER" "$SSH_HOST" "$SSH_PORT"
-printf "  $(gum style --bold 'Dokploy')  http://%s:3000\n" "$PUBLIC_IP"
 printf "  $(gum style --bold 'Log ret.') %s days\n" "$LOG_DAYS"
 printf "  $(gum style --bold 'Log')      %s\n" "$LOG_FILE"
 echo ""
@@ -1297,13 +1085,8 @@ gum style --foreground 240 "  ────────────────�
 printf "  $(gum style --bold --foreground 6 '1')  Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
 printf "  $(gum style --bold --foreground 6 '2')  Run ./cleanup.sh  -- remove old default user\n"
 printf "  $(gum style --bold --foreground 6 '3')  Run ./check.sh    -- verify hardening\n"
-printf "  $(gum style --bold --foreground 6 '4')  Run ./purge.sh    -- remove setup files from server\n"
-printf "  $(gum style --bold --foreground 6 '5')  Setup Dokploy at http://%s:3000\n" "$PUBLIC_IP"
-printf "  $(gum style --bold --foreground 6 '6')  After SSL, close port 3000:\n"
-printf "       sudo ufw delete allow 3000/tcp\n"
-printf "       sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT\n"
-printf "       sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true\n"
-printf "       (no save needed -- port 3000 is not in the persistent docker-firewall service)\n"
+printf "  $(gum style --bold --foreground 6 '4')  Run ./install-dokploy.sh  -- install Docker + Dokploy\n"
+printf "  $(gum style --bold --foreground 6 '5')  Run ./purge.sh    -- remove setup files from server\n"
 echo ""
 
-printf '\a'  # Terminal bell -- audible notification that setup is complete
+printf '\a'

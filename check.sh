@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-VERSION="3.0.0"
+VERSION="4.0.0"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Check v$VERSION"
@@ -129,6 +129,12 @@ else
     pass "SSH socket disabled"
 fi
 
+if [ -f /etc/tmpfiles.d/sshd.conf ] && grep -q "/run/sshd" /etc/tmpfiles.d/sshd.conf 2>/dev/null; then
+    pass "Boot safety: /run/sshd created via tmpfiles.d"
+else
+    warn_check "/run/sshd tmpfiles.d config missing -- sshd may fail after reboot"
+fi
+
 if grep -q "Ciphers" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
     pass "SSH strong ciphers configured"
 else
@@ -172,30 +178,6 @@ if sudo ufw status | grep -q "Status: active"; then
     fi
 else
     fail "UFW is NOT active"
-fi
-
-if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
-    pass "DOCKER-USER deny-by-default rule present (IPv4)"
-else
-    warn_check "DOCKER-USER DROP rule missing -- Docker containers may be exposed"
-fi
-
-if sudo ip6tables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
-    pass "DOCKER-USER deny-by-default rule present (IPv6)"
-else
-    warn_check "DOCKER-USER IPv6 DROP rule missing -- Docker containers may be exposed on IPv6"
-fi
-
-if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -qE "dpt:80|dpt:443"; then
-    pass "DOCKER-USER allows ports 80 and 443"
-else
-    warn_check "DOCKER-USER missing ACCEPT rules for 80/443"
-fi
-
-if systemctl is-active docker-firewall &>/dev/null; then
-    pass "docker-firewall.service active (DOCKER-USER rules persist across Docker restarts)"
-else
-    warn_check "docker-firewall.service not active -- DOCKER-USER rules may be lost after Docker restart"
 fi
 
 # === FAIL2BAN ===
@@ -432,10 +414,10 @@ else
     warn_check "Custom logrotate config for syslog/auth.log not found"
 fi
 
-# === DOCKER ===
-section "Docker"
-
+# === DOCKER (optional — only checked if installed) ===
 if command -v docker &>/dev/null; then
+    section "Docker"
+
     pass "Docker installed ($(docker --version 2>/dev/null | awk '{print $3}' | tr -d ','))"
 
     if [ -f /etc/docker/daemon.json ]; then
@@ -471,30 +453,52 @@ if command -v docker &>/dev/null; then
     else
         warn_check "Docker Content Trust not configured"
     fi
-else
-    fail "Docker NOT installed"
-fi
 
-# === DOKPLOY / TRAEFIK ===
-section "Dokploy / Traefik"
+    if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
+        pass "DOCKER-USER deny-by-default rule present (IPv4)"
+    else
+        warn_check "DOCKER-USER DROP rule missing -- Docker containers may be exposed"
+    fi
 
-if curl -s --max-time 5 http://localhost:3000 &>/dev/null; then
-    pass "Dokploy responding on port 3000"
-else
-    warn_check "Dokploy not responding on port 3000"
-fi
+    if sudo ip6tables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
+        pass "DOCKER-USER deny-by-default rule present (IPv6)"
+    else
+        warn_check "DOCKER-USER IPv6 DROP rule missing -- Docker containers may be exposed on IPv6"
+    fi
 
-if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q traefik; then
-    pass "Traefik container running"
-else
-    fail "Traefik container NOT running -- ports 80/443 are dead"
-fi
+    if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -qE "dpt:80|dpt:443"; then
+        pass "DOCKER-USER allows ports 80 and 443"
+    else
+        warn_check "DOCKER-USER missing ACCEPT rules for 80/443"
+    fi
 
-if curl -s --max-time 5 http://localhost:80 &>/dev/null || \
-   curl -sk --max-time 5 https://localhost:443 &>/dev/null; then
-    pass "Web server responding on port 80/443"
-else
-    fail "Nothing responding on port 80/443 -- check Traefik"
+    if systemctl is-active docker-firewall &>/dev/null; then
+        pass "docker-firewall.service active (DOCKER-USER rules persist across Docker restarts)"
+    else
+        warn_check "docker-firewall.service not active -- DOCKER-USER rules may be lost after Docker restart"
+    fi
+
+    # === DOKPLOY / TRAEFIK (only if Docker is present) ===
+    section "Dokploy / Traefik"
+
+    if curl -s --max-time 5 http://localhost:3000 &>/dev/null; then
+        pass "Dokploy responding on port 3000"
+    else
+        warn_check "Dokploy not responding on port 3000 (not installed or stopped)"
+    fi
+
+    if sudo docker ps --format '{{.Names}}' 2>/dev/null | grep -q traefik; then
+        pass "Traefik container running"
+    else
+        warn_check "Traefik container not running (normal if Dokploy not installed)"
+    fi
+
+    if curl -s --max-time 5 http://localhost:80 &>/dev/null || \
+       curl -sk --max-time 5 https://localhost:443 &>/dev/null; then
+        pass "Web server responding on port 80/443"
+    else
+        warn_check "Nothing responding on port 80/443 (normal if no app deployed yet)"
+    fi
 fi
 
 # === SUMMARY ===
