@@ -293,6 +293,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Config backup | `sshd_config.bak` saved before changes |
 | Summary file | `~/.vps_setup_summary` with all details (chmod 600) |
 | Double confirmation | `CONFIRM` required before closing port 22 |
+| APT lock handling | Waits up to 120s for `unattended-upgrades` to release dpkg lock on fresh VPS |
 | No lockout | Password auth stays on until SSH key is verified |
 | Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
 | Supply chain | GPG fingerprint verification for Charm and Docker repos, scripts pinned to release tag (`v5.0.0`) instead of `main` |
