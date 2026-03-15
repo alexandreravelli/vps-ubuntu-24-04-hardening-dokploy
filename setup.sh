@@ -670,8 +670,7 @@ log "Core dumps restricted"
 # /tmp noexec is NOT applied automatically because it breaks Docker builds
 # and Dokploy operations after every reboot. This is the intended target use case.
 # Users who don't use Docker can enable it manually:
-log "/tmp noexec skipped (incompatible with Docker/Dokploy)"
-log "To enable manually: echo 'tmpfs /tmp tmpfs defaults,noexec,nosuid,nodev,size=512M 0 0' >> /etc/fstab && reboot"
+echo "[OK] $(date +%H:%M:%S) /tmp noexec skipped (incompatible with Docker/Dokploy)" >> "$LOG_FILE" 2>/dev/null || true
 
 echo 'install usb-storage /bin/true' | sudo tee /etc/modprobe.d/no-usb-storage.conf > /dev/null
 log "USB mass storage disabled"
