@@ -1079,6 +1079,15 @@ if gum confirm "Did SSH work on port $SSH_PORT?"; then
     CONFIRM_CLOSE=$(gum input --placeholder "Type CONFIRM to proceed, anything else to cancel" --prompt "> " --prompt.foreground 3)
 
     if [ "$CONFIRM_CLOSE" = "CONFIRM" ]; then
+        echo ""
+        printf "  \033[1;33mThis SSH session will close in 5 seconds.\033[0m\n"
+        printf "  \033[1;33mReconnect with: ssh %s@%s -p %s\033[0m\n" "$NEW_USER" "$SSH_HOST" "$SSH_PORT"
+        echo ""
+        for i in 5 4 3 2 1; do
+            printf "\r  \033[1;31m%s...\033[0m " "$i"
+            sleep 1
+        done
+        echo ""
         sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port $SSH_PORT
 PermitRootLogin no
