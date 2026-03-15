@@ -71,17 +71,20 @@ cleanup_on_error() {
         printf "  Check the log: %s\n" "$LOG_FILE"
         printf "  \033[1;31m──────────────────────────────────────────────\033[0m\n"
 
-        if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ]; then
+        # Always clean up standalone sshd if it's running
+        if [ -f /run/sshd-hardened.pid ]; then
+            sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
+            sudo rm -f /run/sshd-hardened.pid 2>/dev/null || true
+        fi
+
+        if [ "$SETUP_PHASE" = "ssh" ] || [ "$SETUP_PHASE" = "firewall" ] || [ "$SETUP_PHASE" = "ssh-test" ]; then
             echo ""
             printf "  \033[1;33m[!] Restoring SSH access on port 22...\033[0m\n"
             sudo ufw allow 22/tcp 2>/dev/null || true
             sudo rm -f /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null || true
+            sudo rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf 2>/dev/null || true
             sudo rm -rf /etc/systemd/system/ssh.socket.d 2>/dev/null || true
             sudo systemctl daemon-reload 2>/dev/null || true
-            if [ -f /run/sshd-hardened.pid ]; then
-                sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
-                sudo rm -f /run/sshd-hardened.pid 2>/dev/null || true
-            fi
             printf "  \033[1;33m[!] Port 22 restored. Your session should be intact.\033[0m\n"
         fi
     fi
@@ -577,10 +580,10 @@ SETUP_PHASE="system-update"
 
 # Harden the CURRENT SSH session to survive network disruptions caused by
 # sysctl changes, DNS reconfiguration, and auditd restarts later in the script.
-# This sets aggressive keepalives on the running sshd BEFORE we touch anything.
+# Named zz- so it sorts AFTER hardening.conf and overrides its ClientAliveInterval.
 sudo mkdir -p /etc/ssh/sshd_config.d
-if [ ! -f /etc/ssh/sshd_config.d/hardening.conf ]; then
-    sudo tee /etc/ssh/sshd_config.d/keepalive.conf > /dev/null << 'KEEPALIVE'
+if [ ! -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf ]; then
+    sudo tee /etc/ssh/sshd_config.d/zz-setup-keepalive.conf > /dev/null << 'KEEPALIVE'
 ClientAliveInterval 15
 ClientAliveCountMax 10
 KEEPALIVE
@@ -835,8 +838,14 @@ CURRENT_STEP=6
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Configure firewall"
 SETUP_PHASE="firewall"
 
-# Disable UFW before reset to prevent flushing active iptables rules
-# (which would kill the current SSH session)
+# Ensure iptables default policy is ACCEPT before touching UFW.
+# This prevents any brief window where packets are dropped during reset.
+sudo iptables -P INPUT ACCEPT 2>/dev/null || true
+sudo iptables -P FORWARD ACCEPT 2>/dev/null || true
+sudo iptables -P OUTPUT ACCEPT 2>/dev/null || true
+sudo ip6tables -P INPUT ACCEPT 2>/dev/null || true
+sudo ip6tables -P FORWARD ACCEPT 2>/dev/null || true
+sudo ip6tables -P OUTPUT ACCEPT 2>/dev/null || true
 sudo ufw disable > /dev/null 2>&1 || true
 sudo ufw --force reset > /dev/null
 sudo ufw default deny incoming > /dev/null
@@ -883,6 +892,7 @@ if [ -f /run/sshd-hardened.pid ]; then
 fi
 
 # Write SSH hardening config (port 22 kept open until CONFIRM)
+# Ciphers include fallbacks (aes256-ctr, hmac-sha2-256) for Termius compatibility
 sudo mkdir -p /etc/ssh/sshd_config.d
 sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port 22
@@ -904,25 +914,32 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 LogLevel VERBOSE
 
-Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
-MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
-KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512
 EOF
 
 sudo /usr/sbin/sshd -t || error "SSH config validation failed"
 
-# Start standalone sshd on custom port for this session
-sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
+# Start standalone sshd on custom port for this session.
+# Use -f /dev/null to avoid loading hardening.conf (which would conflict
+# with Port 22 already bound by ssh.socket and apply restrictive ciphers).
+# Explicit options ensure password + pubkey auth work for the SSH test.
+sudo /usr/sbin/sshd -f /dev/null \
+    -p "$SSH_PORT" \
+    -o "PidFile=/run/sshd-hardened.pid" \
+    -o "HostKey=/etc/ssh/ssh_host_ed25519_key" \
+    -o "HostKey=/etc/ssh/ssh_host_rsa_key" \
+    -o "PasswordAuthentication yes" \
+    -o "PubkeyAuthentication yes" \
+    -o "UsePAM yes" \
+    -o "AuthorizedKeysFile .ssh/authorized_keys" \
+    -o "Subsystem sftp /usr/lib/openssh/sftp-server"
 
-# Prepare ssh.socket override for custom port (applied after CONFIRM, not now).
-# Writing the file now but NOT running daemon-reload — this prevents systemd
-# from reapplying the socket immediately and killing port 22 before Phase 3.
-sudo mkdir -p /etc/systemd/system/ssh.socket.d
-sudo tee /etc/systemd/system/ssh.socket.d/override.conf > /dev/null << EOF
-[Socket]
-ListenStream=
-ListenStream=$SSH_PORT
-EOF
+# NOTE: ssh.socket override is NOT written here. It is written in the CONFIRM
+# block after the user has verified the connection works. This prevents:
+# 1. daemon-reload (implicit on reboot) from switching ssh.socket to custom port
+# 2. The user being locked out of port 22 if they reboot before CONFIRM
 
 log "SSH hardened (port $SSH_PORT)"
 
@@ -1016,16 +1033,26 @@ log "Post-install scripts downloaded to $SCRIPTS_DIR"
 # Schedule auto-lockdown in 24h if CONFIRM is not completed
 # This prevents port 22 + password auth from staying open indefinitely
 if command -v at &>/dev/null; then
-    echo "if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null; then
-        sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf
-        sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
-        systemctl daemon-reload
-        systemctl reload ssh 2>/dev/null || true
-        systemctl restart ssh.socket 2>/dev/null || true
-        ufw delete allow 22/tcp 2>/dev/null || true
-        sed -i 's/STATUS=pending_confirm/STATUS=auto_locked/' '$USER_HOME/.vps_setup_summary'
-        echo '[AUTO-LOCKDOWN] $(date) Port 22 closed and password auth disabled after 24h timeout' >> '$LOG_FILE'
-    fi" | at now + 24 hours 2>/dev/null || true
+    cat << LOCKDOWN_EOF | at now + 24 hours 2>/dev/null || true
+if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null; then
+    # Kill standalone sshd
+    [ -f /run/sshd-hardened.pid ] && kill "\$(cat /run/sshd-hardened.pid)" 2>/dev/null; rm -f /run/sshd-hardened.pid
+    # Close port 22 in SSH config
+    sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf
+    sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
+    # Write socket override and apply
+    mkdir -p /etc/systemd/system/ssh.socket.d
+    echo -e '[Socket]\nListenStream=\nListenStream=$SSH_PORT' > /etc/systemd/system/ssh.socket.d/override.conf
+    systemctl daemon-reload
+    systemctl restart ssh.socket 2>/dev/null || true
+    # Firewall
+    ufw delete allow 22/tcp 2>/dev/null || true
+    # Cleanup
+    rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf
+    sed -i 's/STATUS=pending_confirm/STATUS=auto_locked/' '$USER_HOME/.vps_setup_summary'
+    echo "[AUTO-LOCKDOWN] \$(date) Port 22 closed after 24h timeout" >> '$LOG_FILE'
+fi
+LOCKDOWN_EOF
     log "Auto-lockdown scheduled in 24h if CONFIRM not completed"
 fi
 
@@ -1086,13 +1113,25 @@ ClientAliveCountMax 2
 LogLevel VERBOSE
 AllowUsers $NEW_USER
 
-Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
-MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
-KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org
+Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
+MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
+KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512
 EOF
         sudo /usr/sbin/sshd -t || error "SSH config validation failed"
-        sudo kill -HUP "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
-        # NOW apply the socket override — port 22 is confirmed closed
+
+        # Kill standalone sshd BEFORE restarting ssh.socket to avoid port conflict
+        if [ -f /run/sshd-hardened.pid ]; then
+            sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
+            sudo rm -f /run/sshd-hardened.pid
+        fi
+
+        # Write ssh.socket override and apply NOW (port 22 is confirmed working)
+        sudo mkdir -p /etc/systemd/system/ssh.socket.d
+        sudo tee /etc/systemd/system/ssh.socket.d/override.conf > /dev/null << EOF
+[Socket]
+ListenStream=
+ListenStream=$SSH_PORT
+EOF
         sudo systemctl daemon-reload
         sudo systemctl restart ssh.socket 2>/dev/null || true
 
@@ -1122,7 +1161,7 @@ EOF
         log "Audit rules locked (immutable)"
 
         # Remove temporary keepalive config (hardening.conf has its own ClientAlive settings)
-        sudo rm -f /etc/ssh/sshd_config.d/keepalive.conf
+        sudo rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf
 
         sudo sed -i 's/STATUS=pending_confirm/STATUS=complete/' "$USER_HOME/.vps_setup_summary"
         log "Port 22 closed, password auth disabled, rate limiting enabled"
