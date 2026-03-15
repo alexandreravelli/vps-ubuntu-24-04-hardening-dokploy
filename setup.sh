@@ -856,15 +856,15 @@ sudo /usr/sbin/sshd -t || error "SSH config validation failed"
 # Start standalone sshd on custom port for this session
 sudo /usr/sbin/sshd -p "$SSH_PORT" -o "PidFile=/run/sshd-hardened.pid"
 
-# Reconfigure ssh.socket to listen on custom port after reboot
-# (instead of disabling it, which breaks ssh.service on Ubuntu 24.04)
+# Prepare ssh.socket override for custom port (applied after CONFIRM, not now).
+# Writing the file now but NOT running daemon-reload — this prevents systemd
+# from reapplying the socket immediately and killing port 22 before Phase 3.
 sudo mkdir -p /etc/systemd/system/ssh.socket.d
 sudo tee /etc/systemd/system/ssh.socket.d/override.conf > /dev/null << EOF
 [Socket]
 ListenStream=
 ListenStream=$SSH_PORT
 EOF
-sudo systemctl daemon-reload
 
 log "SSH hardened (port $SSH_PORT)"
 
@@ -961,6 +961,7 @@ if command -v at &>/dev/null; then
     echo "if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null; then
         sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf
         sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
+        systemctl daemon-reload
         systemctl reload ssh 2>/dev/null || true
         systemctl restart ssh.socket 2>/dev/null || true
         ufw delete allow 22/tcp 2>/dev/null || true
@@ -1033,6 +1034,8 @@ KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sh
 EOF
         sudo /usr/sbin/sshd -t || error "SSH config validation failed"
         sudo kill -HUP "$(cat /run/sshd-hardened.pid 2>/dev/null)" 2>/dev/null || true
+        # NOW apply the socket override — port 22 is confirmed closed
+        sudo systemctl daemon-reload
         sudo systemctl restart ssh.socket 2>/dev/null || true
 
         sudo ufw delete allow 22/tcp 2>/dev/null || true
