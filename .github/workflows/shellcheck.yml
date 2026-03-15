@@ -19,10 +19,11 @@ jobs:
         run: sudo apt-get install -y shellcheck
 
       - name: Run ShellCheck
-        run: shellcheck -x -s bash -S warning setup.sh cleanup.sh check.sh
+        run: shellcheck -x -s bash -S warning setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh
 
       - name: Syntax check
         run: |
-          bash -n setup.sh
-          bash -n cleanup.sh
-          bash -n check.sh
+          for f in setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh; do
+            echo "Checking $f..."
+            bash -n "$f"
+          done

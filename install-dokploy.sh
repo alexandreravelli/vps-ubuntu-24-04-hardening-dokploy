@@ -140,6 +140,26 @@ progress_bar() {
     echo ""
 }
 
+wait_for_apt() {
+    local max_wait=120
+    local waited=0
+    while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 ||
+          sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 ||
+          sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+        if [ "$waited" -eq 0 ]; then
+            warn "APT is locked by another process (likely unattended-upgrades). Waiting..."
+        fi
+        sleep 5
+        waited=$((waited + 5))
+        if [ "$waited" -ge "$max_wait" ]; then
+            error "APT still locked after ${max_wait}s — kill the process or try again later"
+        fi
+    done
+    if [ "$waited" -gt 0 ]; then
+        log "APT lock released after ${waited}s"
+    fi
+}
+
 run_with_spinner() {
     local label="$1"
     shift
@@ -244,6 +264,7 @@ CURRENT_STEP=1
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install Docker (~2-3 min)"
 SETUP_PHASE="docker"
 
+wait_for_apt
 run_with_spinner "Installing Docker prerequisites" sudo apt-get install -y -qq ca-certificates curl gnupg
 sudo install -m 0755 -d /etc/apt/keyrings
 DOCKER_GPG_TMP=$(mktemp)

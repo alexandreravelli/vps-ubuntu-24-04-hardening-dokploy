@@ -136,6 +136,26 @@ progress_bar() {
     echo ""
 }
 
+wait_for_apt() {
+    local max_wait=120
+    local waited=0
+    while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 ||
+          sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 ||
+          sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+        if [ "$waited" -eq 0 ]; then
+            warn "APT is locked by another process (likely unattended-upgrades). Waiting..."
+        fi
+        sleep 5
+        waited=$((waited + 5))
+        if [ "$waited" -ge "$max_wait" ]; then
+            error "APT still locked after ${max_wait}s — kill the process or try again later"
+        fi
+    done
+    if [ "$waited" -gt 0 ]; then
+        log "APT lock released after ${waited}s"
+    fi
+}
+
 run_with_spinner() {
     local label="$1"
     shift
@@ -543,6 +563,7 @@ CURRENT_STEP=3
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Update system (~2-3 min)"
 SETUP_PHASE="system-update"
 
+wait_for_apt
 run_with_spinner "Updating package lists" sudo apt-get update -qq
 sudo mkdir -p /etc/needrestart/conf.d
 sudo tee /etc/needrestart/conf.d/99-no-ssh-restart.conf > /dev/null << 'NEEDRESTART'
@@ -643,6 +664,7 @@ CURRENT_STEP=5
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Install security tools (~1-2 min)"
 SETUP_PHASE="security-tools"
 
+wait_for_apt
 run_with_spinner "Installing UFW, Fail2Ban, auditd, pwquality" sudo apt-get install -y -qq ufw fail2ban unattended-upgrades libpam-pwquality auditd
 log "Security tools installed"
 
