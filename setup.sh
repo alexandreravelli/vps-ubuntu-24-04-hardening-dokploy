@@ -447,22 +447,9 @@ LOG_WEEKS=$(( LOG_DAYS / 7 ))
 
 echo ""
 gum style --bold --foreground 2 "  All inputs collected. Starting hardening..."
+gum style --foreground 240 "  If your SSH session drops, reconnect with: sudo screen -r hardening"
 echo ""
-gum style \
-    --border rounded \
-    --border-foreground 3 \
-    --foreground 3 \
-    --padding "0 2" \
-    --margin "0 2" \
-    "⚠  Your SSH session may disconnect during hardening." \
-    "   This is NORMAL — the script continues in the background." \
-    "" \
-    "   If disconnected, reconnect and run:" \
-    "   sudo screen -r hardening" \
-    "" \
-    "   DO NOT reset your VPS. The script is still running."
-echo ""
-sleep 5
+sleep 2
 
 # ╔════════════════════════════════════════════════════════════════════╗
 # ║  PHASE 2 — APPLY HARDENING (non-interactive)                      ║
