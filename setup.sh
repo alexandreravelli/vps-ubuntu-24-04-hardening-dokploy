@@ -154,7 +154,8 @@ run_with_log() {
     printf "  \033[1;34m>> %s\033[0m\n" "$label"
     local tmpfile
     tmpfile=$(mktemp) || { echo "Failed to create temp file"; return 1; }
-    # shellcheck disable=SC2064 -- $tmpfile must expand now, not at signal time
+    # $tmpfile must expand now, not at signal time
+    # shellcheck disable=SC2064
     trap "rm -f '$tmpfile'; trap - RETURN" RETURN
     "$@" > "$tmpfile" 2>&1 &
     local pid=$!
