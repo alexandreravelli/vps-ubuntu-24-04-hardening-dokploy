@@ -169,8 +169,8 @@ gum style \
     --align center \
     "VPS HARDENING SCRIPT" \
     "" \
-    "Ubuntu 24.04 LTS" \
-    "~5 min  ·  7 steps"
+    "Ubuntu 24.04 LTS · Secure in 5 minutes" \
+    "7 steps · Key-only SSH · Firewall · Kernel hardening"
 
 echo ""
 

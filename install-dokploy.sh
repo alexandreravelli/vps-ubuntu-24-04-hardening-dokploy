@@ -167,7 +167,8 @@ gum style \
     --align center \
     "DOCKER + DOKPLOY INSTALLER" \
     "" \
-    "~5 min  ·  3 steps"
+    "Self-hosted PaaS · Docker Swarm · Deny-by-default firewall" \
+    "3 steps · ~5 minutes"
 
 echo ""
 gum style --bold --foreground 6 "  WHAT IT DOES"
