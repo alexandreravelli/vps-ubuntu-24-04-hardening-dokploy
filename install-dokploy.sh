@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.8"
+VERSION="5.0.9"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -288,8 +288,7 @@ echo \
 run_with_spinner "Updating Docker repository" sudo apt-get update -qq
 run_with_log "Installing Docker Engine" sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker "$NEW_USER"
-echo 'export DOCKER_CONTENT_TRUST=1' | sudo tee /etc/profile.d/docker-content-trust.sh > /dev/null
-log "Docker installed (official APT repo with GPG, content trust enabled)"
+log "Docker installed (official APT repo with GPG)"
 
 sudo mkdir -p /etc/docker
 if [ "$LOG_DAYS" -le 90 ]; then
@@ -393,15 +392,23 @@ fi
 INSTALLER_HASH=$(sha256sum "$DOKPLOY_INSTALLER" | awk '{print $1}')
 log "Dokploy installer SHA256: $INSTALLER_HASH"
 
-# Dokploy's installer runs "docker swarm init" which recreates network
-# interfaces, causing the kernel to send RST packets that kill SSH.
-# Block outgoing RST on the SSH port so the client sees a brief freeze
-# instead of a disconnection. Removed after install.
-sudo iptables -I OUTPUT -p tcp --sport "$SSH_PORT" --tcp-flags RST RST -j DROP 2>/dev/null || true
+# Pre-create docker_gwbridge before Dokploy runs "docker swarm init".
+# When swarm init finds this bridge already present, it skips recreating it,
+# which prevents the network disruption that kills SSH connections.
+# See: https://docs.docker.com/engine/swarm/networking/
+if ! sudo docker network inspect docker_gwbridge &>/dev/null; then
+    sudo docker network create \
+        --subnet 172.18.0.0/16 \
+        --gateway 172.18.0.1 \
+        -o com.docker.network.bridge.name=docker_gwbridge \
+        -o com.docker.network.bridge.enable_icc=false \
+        -o com.docker.network.bridge.enable_ip_masquerade=true \
+        docker_gwbridge > /dev/null 2>&1
+    log "Pre-created docker_gwbridge (prevents SSH disruption during swarm init)"
+fi
 
 run_with_log "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
-sudo iptables -D OUTPUT -p tcp --sport "$SSH_PORT" --tcp-flags RST RST -j DROP 2>/dev/null || true
 log "Dokploy installed"
 
 sudo apt-mark unhold ufw > /dev/null 2>&1 || true
@@ -454,6 +461,10 @@ elif ! [ -f /run/sshd-hardened.pid ] && ! systemctl is-active ssh.service &>/dev
     sudo systemctl start ssh.service
     log "ssh.service started as fallback"
 fi
+
+# Enable Content Trust now that Dokploy images (redis, postgres) are pulled
+echo 'export DOCKER_CONTENT_TRUST=1' | sudo tee /etc/profile.d/docker-content-trust.sh > /dev/null
+log "Docker Content Trust enabled"
 
 log "Post-Dokploy recovery complete — all services verified"
 
