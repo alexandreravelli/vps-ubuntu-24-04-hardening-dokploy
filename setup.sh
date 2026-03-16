@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.1"
+VERSION="5.0.2"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -1037,6 +1037,8 @@ if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null;
     # Close port 22 in SSH config
     sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/hardening.conf
     sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
+    # Restrict SSH to the admin user only
+    grep -q 'AllowUsers' /etc/ssh/sshd_config.d/hardening.conf || echo 'AllowUsers $NEW_USER' >> /etc/ssh/sshd_config.d/hardening.conf
     # Write socket override and apply
     mkdir -p /etc/systemd/system/ssh.socket.d
     printf '[Socket]\nListenStream=\nListenStream=0.0.0.0:%s\nListenStream=[::]:%s\n' '$SSH_PORT' '$SSH_PORT' > /etc/systemd/system/ssh.socket.d/override.conf

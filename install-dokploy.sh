@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.1"
+VERSION="5.0.2"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
