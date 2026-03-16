@@ -530,3 +530,9 @@ printf "       sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/de
 echo ""
 
 printf '\a'
+
+# If running inside screen, wait for user to read the summary before screen exits
+if [ -n "${STY:-}" ]; then
+    echo ""
+    read -rp "  Press Enter to exit..."
+fi
