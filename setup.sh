@@ -1085,13 +1085,15 @@ if gum confirm "Did SSH work on port $SSH_PORT?"; then
 
     if [ "$CONFIRM_CLOSE" = "CONFIRM" ]; then
         echo ""
-        printf "  \033[1;33mThis SSH session will close in 5 seconds.\033[0m\n"
+        echo ""
+        printf "  \033[1;33mThis server will reboot in 10 seconds to finalize SSH hardening.\033[0m\n"
         printf "  \033[1;33mReconnect with: ssh %s@%s -p %s\033[0m\n" "$NEW_USER" "$SSH_HOST" "$SSH_PORT"
         echo ""
-        for i in 5 4 3 2 1; do
+        for i in 10 9 8 7 6 5 4 3 2 1; do
             printf "\r  \033[1;31m%s...\033[0m " "$i"
             sleep 1
         done
+        printf "\r  \033[1;31mRebooting now...\033[0m\n"
         echo ""
         sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port $SSH_PORT
@@ -1170,8 +1172,10 @@ EOF
         sudo rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf
 
         sudo sed -i 's/STATUS=pending_confirm/STATUS=complete/' "$USER_HOME/.vps_setup_summary"
-        log "Port 22 closed, password auth disabled"
-        log "Standalone sshd serving port $SSH_PORT until next reboot (then ssh.socket takes over)"
+        log "Port 22 closed, password auth disabled, rebooting to finalize"
+
+        # Reboot to let ssh.socket take over on the custom port
+        sudo reboot
     else
         warn "Confirmation cancelled — keeping port 22 and password auth open"
     fi
@@ -1253,12 +1257,11 @@ echo ""
 gum style --bold --foreground 2 "  NEXT STEPS"
 gum style --foreground 240 "  ──────────────────────────────────────────────────"
 printf "  $(gum style --bold --foreground 6 '1')  Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
-printf "  $(gum style --bold --foreground 6 '2')  sudo reboot  — finalize SSH port change\n"
-printf "  $(gum style --bold --foreground 6 '3')  cd ~/vps-hardening/\n"
-printf "  $(gum style --bold --foreground 6 '4')  sudo ./install-dokploy.sh  — install Docker + Dokploy\n"
-printf "  $(gum style --bold --foreground 6 '5')  sudo ./cleanup.sh  — remove old default user\n"
-printf "  $(gum style --bold --foreground 6 '6')  sudo ./check.sh    — verify hardening\n"
-printf "  $(gum style --bold --foreground 6 '7')  sudo ./purge.sh    — remove setup files\n"
+printf "  $(gum style --bold --foreground 6 '2')  cd ~/vps-hardening/\n"
+printf "  $(gum style --bold --foreground 6 '3')  sudo ./install-dokploy.sh  — install Docker + Dokploy\n"
+printf "  $(gum style --bold --foreground 6 '4')  sudo ./cleanup.sh  — remove old default user\n"
+printf "  $(gum style --bold --foreground 6 '5')  sudo ./check.sh    — verify hardening\n"
+printf "  $(gum style --bold --foreground 6 '6')  sudo ./purge.sh    — remove setup files\n"
 echo ""
 
 printf '\a'
