@@ -416,7 +416,7 @@ sudo iptables -P INPUT ACCEPT 2>/dev/null || true
 sudo ip6tables -P INPUT ACCEPT 2>/dev/null || true
 log "UFW temporarily disabled for Dokploy install (will be restored after)"
 
-run_with_spinner "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
+run_with_log "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
 log "Dokploy installed"
 
