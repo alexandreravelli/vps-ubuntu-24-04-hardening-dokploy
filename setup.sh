@@ -1185,7 +1185,7 @@ EOF
         log "Port 22 closed, password auth disabled, rebooting to finalize"
 
         # Reboot to let ssh.socket take over on the custom port
-        sudo reboot
+        sudo shutdown -r now --no-wall 2>/dev/null || sudo reboot
     else
         warn "Confirmation cancelled — keeping port 22 and password auth open"
     fi
