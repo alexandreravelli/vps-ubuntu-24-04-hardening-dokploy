@@ -112,6 +112,9 @@ cleanup_on_error() {
         if command -v ufw &>/dev/null; then
             sudo ufw allow "$SSH_PORT/tcp" 2>/dev/null || true
         fi
+
+        # Clean up temporary keepalive
+        sudo rm -f /etc/ssh/sshd_config.d/zz-install-keepalive.conf 2>/dev/null || true
     fi
 }
 trap cleanup_on_error EXIT
@@ -255,6 +258,14 @@ gum style \
 echo ""
 
 gum confirm "Ready to install Docker + Dokploy?" || { echo "Install cancelled."; exit 0; }
+
+# Temporarily harden SSH keepalive to survive Docker/iptables disruptions
+# (setup.sh removed the keepalive after CONFIRM, so we need it again)
+sudo tee /etc/ssh/sshd_config.d/zz-install-keepalive.conf > /dev/null << 'KEEPALIVE'
+ClientAliveInterval 15
+ClientAliveCountMax 10
+KEEPALIVE
+sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload ssh.service 2>/dev/null || true
 
 START_TIME=$SECONDS
 echo "=== Docker + Dokploy Install - $(date) ===" >> "$LOG_FILE"
@@ -453,6 +464,10 @@ elif ! [ -f /run/sshd-hardened.pid ] && ! systemctl is-active ssh.service &>/dev
 fi
 
 log "Post-Dokploy recovery complete — all services verified"
+
+# Remove temporary keepalive (hardening.conf already has 300s/2 retries)
+sudo rm -f /etc/ssh/sshd_config.d/zz-install-keepalive.conf
+sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload ssh.service 2>/dev/null || true
 
 # Wait for Dokploy to be ready
 gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '
