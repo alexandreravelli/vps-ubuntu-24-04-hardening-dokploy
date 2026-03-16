@@ -98,7 +98,7 @@ Phase 3 — SSH test + CONFIRM     (interactive — if SSH drops, server is safe
 
 | # | Step | What happens | Time |
 |---|------|-------------|------|
-| 1 | **Docker** | Official APT repo + GPG + Docker Swarm + log rotation + Content Trust | ~2-3min |
+| 1 | **Docker** | Official APT repo + GPG + log rotation + Content Trust | ~2-3min |
 | 2 | **Firewall** | DOCKER-USER deny-by-default, allow 80 + 443 + 3000 (temporary) | ~5s |
 | 3 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~2-5min |
 
@@ -273,7 +273,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Feature | Details |
 |---------|---------|
 | Official install | APT repo with GPG fingerprint verification, not `curl \| sh` |
-| Docker Swarm | Initialized automatically (required for Traefik/Dokploy) |
+| Docker Swarm | Initialized by Dokploy (required for Traefik) |
 | Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
 | Content Trust | `DOCKER_CONTENT_TRUST=1` — image signature verification |
 | No privilege escalation | `no-new-privileges` in daemon.json |
