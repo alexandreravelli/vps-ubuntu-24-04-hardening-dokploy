@@ -1152,8 +1152,7 @@ EOF
         sudo systemctl stop ssh.socket 2>/dev/null || true
         sudo systemctl stop ssh.service 2>/dev/null || true
 
-        sudo ufw delete allow 22/tcp 2>/dev/null || true
-        sudo ufw delete allow from any to any port 22 proto tcp 2>/dev/null || true
+        sudo ufw delete allow 22/tcp > /dev/null 2>&1 || true
 
         sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
 [sshd]
