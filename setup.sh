@@ -1119,13 +1119,10 @@ KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sh
 EOF
         sudo /usr/sbin/sshd -t || error "SSH config validation failed"
 
-        # Kill standalone sshd BEFORE restarting ssh.socket to avoid port conflict
-        if [ -f /run/sshd-hardened.pid ]; then
-            sudo kill "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
-            sudo rm -f /run/sshd-hardened.pid
-        fi
-
-        # Write ssh.socket override and apply NOW
+        # Write ssh.socket override for next reboot (do NOT restart ssh.socket —
+        # it fails when ssh.service is active and causes ECONNREFUSED).
+        # The standalone sshd continues serving the custom port until reboot,
+        # then ssh.socket takes over automatically.
         sudo mkdir -p /etc/systemd/system/ssh.socket.d
         sudo tee /etc/systemd/system/ssh.socket.d/override.conf > /dev/null << EOF
 [Socket]
@@ -1134,9 +1131,15 @@ ListenStream=0.0.0.0:$SSH_PORT
 ListenStream=[::]:$SSH_PORT
 EOF
         sudo systemctl daemon-reload
-        # Full stop then start (restart fails when ssh.service is active)
-        sudo systemctl stop ssh.socket ssh.service 2>/dev/null || true
-        sudo systemctl start ssh.socket || error "Failed to start ssh.socket on port $SSH_PORT"
+
+        # Reload standalone sshd to pick up the new hardening.conf
+        if [ -f /run/sshd-hardened.pid ]; then
+            sudo kill -HUP "$(cat /run/sshd-hardened.pid)" 2>/dev/null || true
+        fi
+
+        # Stop ssh.socket/ssh.service on port 22 (no longer needed)
+        sudo systemctl stop ssh.socket 2>/dev/null || true
+        sudo systemctl stop ssh.service 2>/dev/null || true
 
         sudo ufw delete allow 22/tcp 2>/dev/null || true
         sudo ufw delete allow from any to any port 22 proto tcp 2>/dev/null || true
@@ -1163,12 +1166,12 @@ EOF
         sudo systemctl restart auditd 2>/dev/null || true
         log "Audit rules locked (immutable)"
 
-        # Remove temporary setup files
+        # Remove temporary setup files (keep sshd_test_config — standalone sshd needs it until reboot)
         sudo rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf
-        sudo rm -f /etc/ssh/sshd_test_config
 
         sudo sed -i 's/STATUS=pending_confirm/STATUS=complete/' "$USER_HOME/.vps_setup_summary"
-        log "Port 22 closed, password auth disabled, rate limiting enabled"
+        log "Port 22 closed, password auth disabled"
+        log "Standalone sshd serving port $SSH_PORT until next reboot (then ssh.socket takes over)"
     else
         warn "Confirmation cancelled — keeping port 22 and password auth open"
     fi
@@ -1250,11 +1253,12 @@ echo ""
 gum style --bold --foreground 2 "  NEXT STEPS"
 gum style --foreground 240 "  ──────────────────────────────────────────────────"
 printf "  $(gum style --bold --foreground 6 '1')  Reconnect as %s on port %s\n" "$NEW_USER" "$SSH_PORT"
-printf "  $(gum style --bold --foreground 6 '2')  cd ~/vps-hardening/\n"
-printf "  $(gum style --bold --foreground 6 '3')  sudo ./install-dokploy.sh  — install Docker + Dokploy\n"
-printf "  $(gum style --bold --foreground 6 '4')  sudo ./cleanup.sh  — remove old default user\n"
-printf "  $(gum style --bold --foreground 6 '5')  sudo ./check.sh    — verify hardening\n"
-printf "  $(gum style --bold --foreground 6 '6')  sudo ./purge.sh    — remove setup files\n"
+printf "  $(gum style --bold --foreground 6 '2')  sudo reboot  — finalize SSH port change\n"
+printf "  $(gum style --bold --foreground 6 '3')  cd ~/vps-hardening/\n"
+printf "  $(gum style --bold --foreground 6 '4')  sudo ./install-dokploy.sh  — install Docker + Dokploy\n"
+printf "  $(gum style --bold --foreground 6 '5')  sudo ./cleanup.sh  — remove old default user\n"
+printf "  $(gum style --bold --foreground 6 '6')  sudo ./check.sh    — verify hardening\n"
+printf "  $(gum style --bold --foreground 6 '7')  sudo ./purge.sh    — remove setup files\n"
 echo ""
 
 printf '\a'
