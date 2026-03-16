@@ -8,8 +8,8 @@
 <h1 align="center">VPS Hardening Script</h1>
 
 <p align="center">
-  <strong>Secure your Ubuntu 24.04 VPS in minutes. Optionally deploy Dokploy.</strong><br>
-  Two scripts. Clean separation. Hardened OS first, then Docker + Dokploy.<br><br>
+  <strong>Every security best practice, one script: hardened SSH, firewall, sysctl, ASLR, Fail2Ban, auditd, auto-updates.</strong><br>
+  Your Ubuntu 24.04 VPS, production-ready. Docker + Dokploy optional.<br><br>
   <a href="#-quick-start">Quick Start</a> · <a href="#-requirements">Requirements</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-after-installation">After Installation</a> · <a href="#-security">Security</a> · <a href="#-faq">FAQ</a>
 </p>
 
