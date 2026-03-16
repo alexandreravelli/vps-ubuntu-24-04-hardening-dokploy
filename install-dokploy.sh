@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.3"
+VERSION="5.0.5"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -319,15 +319,10 @@ EOF
 sudo systemctl restart docker
 log "Docker log rotation configured"
 
-# Initialize Docker Swarm (required for Dokploy/Traefik)
-if ! sudo docker info 2>/dev/null | grep -q "Swarm: active"; then
-    SWARM_ADDR=$(ip -4 route get 8.8.8.8 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1 || true)
-    [ -n "$SWARM_ADDR" ] || error "Could not determine local IP for Docker Swarm -- check network connectivity"
-    run_with_spinner "Initializing Docker Swarm" sudo docker swarm init --advertise-addr "$SWARM_ADDR"
-    log "Docker Swarm initialized (required for Traefik)"
-else
-    log "Docker Swarm already active"
-fi
+# NOTE: Docker Swarm is NOT initialized here. Dokploy's installer does
+# "docker swarm leave --force" then re-inits Swarm itself. If we init
+# Swarm first, the leave+rejoin cycle disrupts iptables and kills SSH.
+# Let Dokploy handle Swarm initialization entirely.
 
 # === STEP 2: DOCKER-USER FIREWALL ===
 CURRENT_STEP=2
@@ -407,12 +402,6 @@ fi
 
 INSTALLER_HASH=$(sha256sum "$DOKPLOY_INSTALLER" | awk '{print $1}')
 log "Dokploy installer SHA256: $INSTALLER_HASH"
-
-# Temporarily set INPUT policy to ACCEPT so that even if Dokploy's installer
-# flushes iptables rules, SSH is not blocked (UFW default policy is DROP).
-# UFW re-applies the proper rules in the post-Dokploy recovery below.
-sudo iptables -P INPUT ACCEPT 2>/dev/null || true
-sudo ip6tables -P INPUT ACCEPT 2>/dev/null || true
 
 run_with_spinner "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
