@@ -275,7 +275,6 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Official install | APT repo with GPG fingerprint verification, not `curl \| sh` |
 | Docker Swarm | Initialized by Dokploy (required for Traefik) |
 | Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
-| Content Trust | `DOCKER_CONTENT_TRUST=1` — image signature verification |
 | No privilege escalation | `no-new-privileges` in daemon.json |
 | DOCKER-USER firewall | deny-by-default, allow Docker bridge (172.16.0.0/12) + overlay (10.0.0.0/8) + IPv6 internal (fd00::/8) |
 | Post-install recovery | Automatically re-verifies UFW, DOCKER-USER, SSH, and needrestart after Dokploy |

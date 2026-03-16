@@ -493,11 +493,6 @@ if command -v docker &>/dev/null; then
         fail "Docker no-new-privileges NOT enabled"
     fi
 
-    if [ -f /etc/profile.d/docker-content-trust.sh ] && grep -q "DOCKER_CONTENT_TRUST=1" /etc/profile.d/docker-content-trust.sh 2>/dev/null; then
-        pass "Docker Content Trust enabled"
-    else
-        warn_check "Docker Content Trust not configured"
-    fi
 
     if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
         pass "DOCKER-USER deny-by-default rule present (IPv4)"

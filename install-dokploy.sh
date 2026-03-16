@@ -4,12 +4,10 @@
 # Usage: sudo bash install-dokploy.sh
 #
 # This script:
-#   1. Installs Docker (official APT repo + GPG)
-#   2. Configures Docker log rotation + Content Trust
-#   3. Initializes Docker Swarm (required for Traefik/Dokploy)
-#   4. Sets up DOCKER-USER firewall (deny-by-default)
-#   5. Installs Dokploy
-#   6. Re-verifies firewall + SSH after Dokploy install
+#   1. Installs Docker (official APT repo + GPG + log rotation)
+#   2. Sets up DOCKER-USER firewall (deny-by-default)
+#   3. Installs Dokploy (handles Swarm init internally)
+#   4. Re-verifies firewall + SSH after Dokploy install
 
 set -euo pipefail
 
@@ -232,7 +230,7 @@ gum style \
     --align center \
     "DOCKER + DOKPLOY INSTALLER" \
     "" \
-    "Self-hosted PaaS · Docker Swarm · Deny-by-default firewall" \
+    "Self-hosted PaaS · Deny-by-default firewall" \
     "3 steps · ~5 minutes"
 
 echo ""
@@ -407,11 +405,6 @@ if ! sudo docker network inspect docker_gwbridge &>/dev/null; then
     log "Pre-created docker_gwbridge (prevents SSH disruption during swarm init)"
 fi
 
-# Disable Content Trust for Dokploy install — redis:7 and postgres:16 are not signed.
-# Also remove profile.d file in case it exists from a previous run.
-export DOCKER_CONTENT_TRUST=0
-sudo rm -f /etc/profile.d/docker-content-trust.sh 2>/dev/null || true
-
 run_with_log "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
 log "Dokploy installed"
@@ -466,10 +459,6 @@ elif ! [ -f /run/sshd-hardened.pid ] && ! systemctl is-active ssh.service &>/dev
     sudo systemctl start ssh.service
     log "ssh.service started as fallback"
 fi
-
-# Enable Content Trust now that Dokploy images (redis, postgres) are pulled
-echo 'export DOCKER_CONTENT_TRUST=1' | sudo tee /etc/profile.d/docker-content-trust.sh > /dev/null
-log "Docker Content Trust enabled"
 
 log "Post-Dokploy recovery complete — all services verified"
 
