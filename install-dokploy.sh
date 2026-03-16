@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.7"
+VERSION="5.0.8"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -113,8 +113,6 @@ cleanup_on_error() {
             sudo ufw allow "$SSH_PORT/tcp" 2>/dev/null || true
         fi
 
-        # Clean up temporary keepalive
-        sudo rm -f /etc/ssh/sshd_config.d/zz-install-keepalive.conf 2>/dev/null || true
     fi
 }
 trap cleanup_on_error EXIT
@@ -259,14 +257,6 @@ echo ""
 
 gum confirm "Ready to install Docker + Dokploy?" || { echo "Install cancelled."; exit 0; }
 
-# Temporarily harden SSH keepalive to survive Docker/iptables disruptions
-# (setup.sh removed the keepalive after CONFIRM, so we need it again)
-sudo tee /etc/ssh/sshd_config.d/zz-install-keepalive.conf > /dev/null << 'KEEPALIVE'
-ClientAliveInterval 15
-ClientAliveCountMax 10
-KEEPALIVE
-sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload ssh.service 2>/dev/null || true
-
 START_TIME=$SECONDS
 echo "=== Docker + Dokploy Install - $(date) ===" >> "$LOG_FILE"
 
@@ -403,21 +393,15 @@ fi
 INSTALLER_HASH=$(sha256sum "$DOKPLOY_INSTALLER" | awk '{print $1}')
 log "Dokploy installer SHA256: $INSTALLER_HASH"
 
-# Dokploy's installer runs "docker swarm leave --force" then "docker swarm init"
-# which heavily modifies iptables (FORWARD, nat, DOCKER-INGRESS chains).
-# On re-runs where Swarm is already active, this destroys and recreates the
-# entire networking stack, which can disrupt SSH even with INPUT ACCEPT.
-#
-# Nuclear option: disable UFW entirely so there are no DROP policies anywhere
-# in iptables. SSH survives because the kernel default is ACCEPT.
-# UFW is fully restored in the post-Dokploy recovery section below.
-sudo ufw disable > /dev/null 2>&1 || true
-sudo iptables -P INPUT ACCEPT 2>/dev/null || true
-sudo ip6tables -P INPUT ACCEPT 2>/dev/null || true
-log "UFW temporarily disabled for Dokploy install (will be restored after)"
+# Dokploy's installer runs "docker swarm init" which recreates network
+# interfaces, causing the kernel to send RST packets that kill SSH.
+# Block outgoing RST on the SSH port so the client sees a brief freeze
+# instead of a disconnection. Removed after install.
+sudo iptables -I OUTPUT -p tcp --sport "$SSH_PORT" --tcp-flags RST RST -j DROP 2>/dev/null || true
 
 run_with_log "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
+sudo iptables -D OUTPUT -p tcp --sport "$SSH_PORT" --tcp-flags RST RST -j DROP 2>/dev/null || true
 log "Dokploy installed"
 
 sudo apt-mark unhold ufw > /dev/null 2>&1 || true
@@ -472,10 +456,6 @@ elif ! [ -f /run/sshd-hardened.pid ] && ! systemctl is-active ssh.service &>/dev
 fi
 
 log "Post-Dokploy recovery complete — all services verified"
-
-# Remove temporary keepalive (hardening.conf already has 300s/2 retries)
-sudo rm -f /etc/ssh/sshd_config.d/zz-install-keepalive.conf
-sudo systemctl reload ssh 2>/dev/null || sudo systemctl reload ssh.service 2>/dev/null || true
 
 # Wait for Dokploy to be ready
 gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '

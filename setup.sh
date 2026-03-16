@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.7"
+VERSION="5.0.8"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
