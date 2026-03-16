@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.6"
+VERSION="5.0.7"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -403,11 +403,18 @@ fi
 INSTALLER_HASH=$(sha256sum "$DOKPLOY_INSTALLER" | awk '{print $1}')
 log "Dokploy installer SHA256: $INSTALLER_HASH"
 
-# Safety net: Dokploy's installer runs "docker swarm init" which modifies
-# iptables chains. Set INPUT policy to ACCEPT so SSH survives any flush.
-# UFW re-applies DROP policy in the post-Dokploy recovery below.
+# Dokploy's installer runs "docker swarm leave --force" then "docker swarm init"
+# which heavily modifies iptables (FORWARD, nat, DOCKER-INGRESS chains).
+# On re-runs where Swarm is already active, this destroys and recreates the
+# entire networking stack, which can disrupt SSH even with INPUT ACCEPT.
+#
+# Nuclear option: disable UFW entirely so there are no DROP policies anywhere
+# in iptables. SSH survives because the kernel default is ACCEPT.
+# UFW is fully restored in the post-Dokploy recovery section below.
+sudo ufw disable > /dev/null 2>&1 || true
 sudo iptables -P INPUT ACCEPT 2>/dev/null || true
 sudo ip6tables -P INPUT ACCEPT 2>/dev/null || true
+log "UFW temporarily disabled for Dokploy install (will be restored after)"
 
 run_with_spinner "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
