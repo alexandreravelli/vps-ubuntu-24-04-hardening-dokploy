@@ -485,6 +485,13 @@ SETUP_PHASE="user-creation"
 
 if [ -n "$INPUT_HOSTNAME" ]; then
     sudo hostnamectl set-hostname "$INPUT_HOSTNAME"
+    # Add hostname to /etc/hosts to prevent slow sudo/DNS lookups
+    if ! grep -q "$INPUT_HOSTNAME" /etc/hosts 2>/dev/null; then
+        sudo sed -i "s/^127\.0\.0\.1.*/127.0.0.1 localhost $INPUT_HOSTNAME/" /etc/hosts
+        if ! grep -q "$INPUT_HOSTNAME" /etc/hosts 2>/dev/null; then
+            echo "127.0.0.1 $INPUT_HOSTNAME" | sudo tee -a /etc/hosts > /dev/null
+        fi
+    fi
     log "Hostname set to '$INPUT_HOSTNAME'"
 else
     warn "No hostname provided — keeping current: $(hostname)"
@@ -900,6 +907,7 @@ AllowTcpForwarding local
 ClientAliveInterval 300
 ClientAliveCountMax 2
 LogLevel VERBOSE
+UseDNS no
 
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
@@ -1113,6 +1121,7 @@ AllowTcpForwarding local
 ClientAliveInterval 300
 ClientAliveCountMax 2
 LogLevel VERBOSE
+UseDNS no
 AllowUsers $NEW_USER
 
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
