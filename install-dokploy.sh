@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.2"
+VERSION="5.0.3"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -407,6 +407,12 @@ fi
 
 INSTALLER_HASH=$(sha256sum "$DOKPLOY_INSTALLER" | awk '{print $1}')
 log "Dokploy installer SHA256: $INSTALLER_HASH"
+
+# Temporarily set INPUT policy to ACCEPT so that even if Dokploy's installer
+# flushes iptables rules, SSH is not blocked (UFW default policy is DROP).
+# UFW re-applies the proper rules in the post-Dokploy recovery below.
+sudo iptables -P INPUT ACCEPT 2>/dev/null || true
+sudo ip6tables -P INPUT ACCEPT 2>/dev/null || true
 
 run_with_spinner "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
