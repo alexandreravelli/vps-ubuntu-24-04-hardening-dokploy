@@ -407,6 +407,11 @@ if ! sudo docker network inspect docker_gwbridge &>/dev/null; then
     log "Pre-created docker_gwbridge (prevents SSH disruption during swarm init)"
 fi
 
+# Disable Content Trust for Dokploy install — redis:7 and postgres:16 are not signed.
+# Also remove profile.d file in case it exists from a previous run.
+export DOCKER_CONTENT_TRUST=0
+sudo rm -f /etc/profile.d/docker-content-trust.sh 2>/dev/null || true
+
 run_with_log "Installing Dokploy (~2-5 min)" bash "$DOKPLOY_INSTALLER"
 rm -f "$DOKPLOY_INSTALLER"
 log "Dokploy installed"
