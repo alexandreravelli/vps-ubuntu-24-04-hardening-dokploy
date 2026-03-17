@@ -94,5 +94,6 @@ printf "    %s\n" "/var/log/vps_setup.log"
 printf "    %s  (contains SSH port, username)\n" "/root/.vps_hardening_config"
 echo ""
 
-# Self-delete
+# Self-delete and remove empty directory
 rm -f "$0"
+rmdir "$SCRIPT_DIR" 2>/dev/null || true
