@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.9"
+VERSION="5.1.0"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -596,6 +596,7 @@ NEEDRESTART
 wait_for_apt
 run_with_spinner "Updating package lists" sudo apt-get update -qq
 run_with_spinner "Upgrading packages" sudo DEBIAN_FRONTEND=noninteractive apt-get upgrade -y -qq
+run_with_spinner "Removing obsolete packages" sudo apt-get autopurge -y -qq
 log "System updated"
 
 sudo timedatectl set-timezone UTC
@@ -668,6 +669,10 @@ kernel.sysrq = 0
 kernel.yama.ptrace_scope = 1
 net.ipv4.icmp_ignore_bogus_error_responses = 1
 fs.suid_dumpable = 0
+kernel.perf_event_paranoid = 3
+net.core.bpf_jit_harden = 2
+dev.tty.ldisc_autoload = 0
+fs.protected_fifos = 2
 EOF
 run_with_spinner "Applying kernel parameters" sudo sysctl --system
 log "Kernel hardening applied"
@@ -682,6 +687,15 @@ echo "[OK] $(date +%H:%M:%S) /tmp noexec skipped (incompatible with Docker/Dokpl
 
 echo 'install usb-storage /bin/true' | sudo tee /etc/modprobe.d/no-usb-storage.conf > /dev/null
 log "USB mass storage disabled"
+
+# Disable uncommon network protocols to reduce attack surface
+sudo tee /etc/modprobe.d/hardening.conf > /dev/null << 'MODPROBE'
+install dccp /bin/true
+install sctp /bin/true
+install rds /bin/true
+install tipc /bin/true
+MODPROBE
+log "Uncommon network protocols disabled (dccp, sctp, rds, tipc)"
 
 # === STEP 5: INSTALL SECURITY TOOLS + CONFIGURE ===
 CURRENT_STEP=5
@@ -769,6 +783,16 @@ reject_username
 enforce_for_root
 EOF
 log "Strong password policy configured"
+
+# Set default umask to 027 (owner=rwx, group=rx, other=none)
+sudo sed -i 's/^UMASK\s\+022$/UMASK\t\t027/' /etc/login.defs
+log "Default umask set to 027"
+
+# Legal login banner
+BANNER_TEXT="Authorized access only. All activity is monitored and logged."
+echo "$BANNER_TEXT" | sudo tee /etc/issue > /dev/null
+echo "$BANNER_TEXT" | sudo tee /etc/issue.net > /dev/null
+log "Legal login banner configured"
 
 # Audit rules
 sudo tee /etc/audit/rules.d/hardening.rules > /dev/null << EOF
@@ -908,6 +932,8 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 LogLevel VERBOSE
 UseDNS no
+TCPKeepAlive no
+Banner /etc/issue.net
 
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
@@ -1124,6 +1150,8 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 LogLevel VERBOSE
 UseDNS no
+TCPKeepAlive no
+Banner /etc/issue.net
 AllowUsers $NEW_USER
 
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes128-ctr

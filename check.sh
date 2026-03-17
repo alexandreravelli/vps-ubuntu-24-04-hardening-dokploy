@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-VERSION="5.0.9"
+VERSION="5.1.0"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Check v$VERSION"
@@ -178,7 +178,19 @@ else
     warn_check "SSH LogLevel not set to VERBOSE"
 fi
 
-if grep -q "AllowTcpForwarding local" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+if grep -q "TCPKeepAlive no" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+        pass "TCPKeepAlive disabled"
+    else
+        warn_check "TCPKeepAlive not disabled"
+    fi
+
+    if grep -q "Banner /etc/issue.net" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
+        pass "SSH banner configured"
+    else
+        warn_check "SSH banner not configured"
+    fi
+
+    if grep -q "AllowTcpForwarding local" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
     pass "TCP forwarding restricted to local only"
 elif grep -q "AllowTcpForwarding no" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
     pass "TCP forwarding fully disabled"
@@ -279,6 +291,10 @@ check_sysctl "kernel.sysrq" "0" "SysRq disabled"
 check_sysctl "kernel.yama.ptrace_scope" "1" "Ptrace restricted"
 check_sysctl "net.ipv4.icmp_ignore_bogus_error_responses" "1" "Bogus ICMP errors ignored"
 check_sysctl "fs.suid_dumpable" "0" "Core dumps disabled (suid)"
+check_sysctl "kernel.perf_event_paranoid" "3" "Perf events restricted"
+check_sysctl "net.core.bpf_jit_harden" "2" "BPF JIT hardened"
+check_sysctl "dev.tty.ldisc_autoload" "0" "TTY line discipline autoload disabled"
+check_sysctl "fs.protected_fifos" "2" "FIFO protection enabled"
 
 # === CORE DUMPS ===
 section "Core Dumps"
@@ -314,6 +330,45 @@ else
     warn_check "USB storage not disabled via modprobe"
 fi
 
+
+# === DISABLED PROTOCOLS ===
+section "Disabled Protocols"
+
+if [ -f /etc/modprobe.d/hardening.conf ]; then
+    for proto in dccp sctp rds tipc; do
+        if grep -q "install $proto /bin/true" /etc/modprobe.d/hardening.conf 2>/dev/null; then
+            pass "$proto protocol disabled"
+        else
+            fail "$proto protocol NOT disabled"
+        fi
+    done
+else
+    fail "Protocol hardening config not found (/etc/modprobe.d/hardening.conf)"
+fi
+
+# === LEGAL BANNER ===
+section "Legal Banner"
+
+if [ -f /etc/issue.net ] && grep -q "Authorized access only" /etc/issue.net 2>/dev/null; then
+    pass "Legal banner configured (/etc/issue.net)"
+else
+    fail "Legal banner NOT configured in /etc/issue.net"
+fi
+
+if [ -f /etc/issue ] && grep -q "Authorized access only" /etc/issue 2>/dev/null; then
+    pass "Legal banner configured (/etc/issue)"
+else
+    fail "Legal banner NOT configured in /etc/issue"
+fi
+
+# === UMASK ===
+section "Umask"
+
+if grep -qE '^UMASK\s+027' /etc/login.defs 2>/dev/null; then
+    pass "Default umask set to 027"
+else
+    fail "Default umask NOT set to 027 in /etc/login.defs"
+fi
 
 # === APPARMOR ===
 section "AppArmor"
