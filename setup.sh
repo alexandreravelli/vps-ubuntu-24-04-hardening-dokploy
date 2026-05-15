@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.0"
+VERSION="1.0.1"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -1015,25 +1015,20 @@ sudo chmod 600 "$USER_HOME/.vps_setup_summary"
 # Download post-install scripts into a dedicated subdirectory
 SCRIPTS_DIR="$USER_HOME/vps-hardening"
 sudo mkdir -p "$SCRIPTS_DIR"
-# Pin to release tag (not main) so a compromised main branch cannot inject code
-# into servers that already ran setup.sh with this version.
+# Pin to release tag so a compromised main branch cannot inject code into
+# servers that already ran setup.sh with this version.
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-${VERSION}"
-REPO_FALLBACK="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
 
 for script in cleanup.sh check.sh purge.sh install-dokploy.sh; do
     if curl -sSL --fail "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
         chmod +x "$SCRIPTS_DIR/$script"
-    elif curl -sSL --fail "$REPO_FALLBACK/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
-        warn "$script: tag release-${VERSION} not found, downloaded from main branch"
-        chmod +x "$SCRIPTS_DIR/$script"
     else
-        warn "Could not download $script"
+        error "Could not download $script from release-${VERSION}"
     fi
 done
 
 # Integrity check (protects against network corruption, not repo compromise)
-if curl -sSL --fail "$REPO_BASE/SHA256SUMS" -o "$SCRIPTS_DIR/SHA256SUMS" 2>/dev/null || \
-   curl -sSL --fail "$REPO_FALLBACK/SHA256SUMS" -o "$SCRIPTS_DIR/SHA256SUMS" 2>/dev/null; then
+if curl -sSL --fail "$REPO_BASE/SHA256SUMS" -o "$SCRIPTS_DIR/SHA256SUMS" 2>/dev/null; then
     pushd "$SCRIPTS_DIR" > /dev/null
     if sha256sum -c SHA256SUMS --status 2>/dev/null; then
         log "Downloaded scripts integrity verified (SHA256)"

@@ -3,6 +3,13 @@
 # Usage: ./cleanup.sh [username]
 set -euo pipefail
 
+VERSION="1.0.1"
+
+if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
+    echo "VPS Hardening Cleanup v$VERSION"
+    exit 0
+fi
+
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
     echo "This script requires root privileges."

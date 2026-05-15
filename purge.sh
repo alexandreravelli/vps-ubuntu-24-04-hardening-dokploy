@@ -4,6 +4,13 @@
 # Usage: sudo ./purge.sh
 set -euo pipefail
 
+VERSION="1.0.1"
+
+if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
+    echo "VPS Hardening Purge v$VERSION"
+    exit 0
+fi
+
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
     echo "This script requires root privileges."
@@ -65,17 +72,17 @@ if [ ! -f "$SCRIPT_DIR/purge.sh" ]; then
     exit 1
 fi
 
-# Refuse to purge outside /home or /root
+# Refuse to purge anything except the dedicated post-install directory.
 case "$SCRIPT_DIR" in
-    /home/*|/root/*) ;;
-    *) echo "  [ERROR] Refusing to purge outside /home or /root: $SCRIPT_DIR"; exit 1 ;;
+    /home/*/vps-hardening|/root/vps-hardening) ;;
+    *) echo "  [ERROR] Refusing to purge outside a vps-hardening directory: $SCRIPT_DIR"; exit 1 ;;
 esac
 
 # Resolve symlinks to prevent following links outside the directory
 REAL_SCRIPT_DIR=$(realpath "$SCRIPT_DIR" 2>/dev/null || readlink -f "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR")
 case "$REAL_SCRIPT_DIR" in
-    /home/*|/root/*) ;;
-    *) echo "  [ERROR] Resolved path is outside /home or /root: $REAL_SCRIPT_DIR"; exit 1 ;;
+    /home/*/vps-hardening|/root/vps-hardening) ;;
+    *) echo "  [ERROR] Resolved path is outside a vps-hardening directory: $REAL_SCRIPT_DIR"; exit 1 ;;
 esac
 
 if ! gum confirm "Delete all setup files from $SCRIPT_DIR?"; then
