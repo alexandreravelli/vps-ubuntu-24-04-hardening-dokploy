@@ -30,7 +30,7 @@ sudo -i
 ```
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.11/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.12/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 The script answers all your questions first, then applies hardening automatically. If your SSH session drops during hardening, the script continues in the background — reconnect with `screen -r hardening`.
@@ -54,14 +54,14 @@ sudo ./install-dokploy.sh
 - User with **sudo** privileges
 - SSH public key ready (`ssh-ed25519` or `ssh-rsa`) — or let the script generate one
 
-> **External firewall (OVH, Hetzner, AWS, etc.):** If your VPS provider has a network-level firewall, open these ports in their control panel **before** running the script:
+> **External firewall (OVH, Hetzner, AWS, etc.):** If your VPS provider has a network-level firewall, open these ports in their control panel **before** running the relevant step:
 
 | Port | Protocol | Purpose | When to close |
 |------|----------|---------|---------------|
 | 22 | TCP | SSH (default, script will move it) | After confirming new SSH port works |
 | 80 | TCP | HTTP / HTTPS certificate validation | Keep open |
 | 443 | TCP | HTTPS | Keep open |
-| 3000 | TCP | Dokploy initial setup | After configuring your domain + HTTPS |
+| 3000 | TCP | Dokploy initial setup (temporary) | After configuring your domain + HTTPS |
 | *custom* | TCP | New SSH port (shown before setup starts and saved at the end) | Keep open |
 
 > The exact SSH port is displayed before setup starts and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
@@ -98,13 +98,13 @@ Phase 3 — SSH test + CONFIRM     (interactive — if SSH drops, server is safe
 
 | # | Step | What happens | Time |
 |---|------|-------------|------|
-| 1 | **Docker** | Official APT repo + GPG + log rotation + Content Trust | ~2-3min |
+| 1 | **Docker** | Official APT repo + GPG fingerprint verification + log rotation + strict CLI mode | ~2-3min |
 | 2 | **Firewall** | DOCKER-USER deny-by-default, allow 80 + 443 + temporary 3000 | ~5s |
 | 3 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~2-5min |
 
 > This script reads the config saved by `setup.sh` (`/root/.vps_hardening_config`) — no need to re-enter anything.
 
-> Docker CLI uses strict mode by default: the admin user is **not** added to the `docker` group. Use `sudo docker ...` for manual Docker commands.
+> Docker CLI uses strict mode by default: the admin user is **not** added to the `docker` group. Use `sudo docker ...` for manual Docker commands. This keeps Docker administration behind sudo because Docker daemon access is root-equivalent.
 
 ### Why two scripts?
 
@@ -194,7 +194,32 @@ cd ~/vps-hardening/
 sudo ./check.sh
 ```
 
-### 6. Clean up setup files
+Expected final result:
+
+```text
+FAIL: 0  WARN: 0
+All configured hardening checks passed.
+```
+
+### 6. Verify public exposure (optional)
+
+From your local machine, scan only the ports this project cares about:
+
+```bash
+nmap -Pn -sV -p 80,443,3000,<SSH_PORT>,2377,4789,7946 your-server-ip
+```
+
+Expected result after Dokploy is secured:
+
+| Port | Expected state |
+|------|----------------|
+| 80 | open |
+| 443 | open |
+| `<SSH_PORT>` | open |
+| 3000 | filtered or closed |
+| 2377, 4789, 7946 | filtered or closed |
+
+### 7. Clean up setup files
 
 ```bash
 cd ~/vps-hardening/
@@ -303,7 +328,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | APT lock handling | Waits up to 120s for `unattended-upgrades` to release dpkg lock on fresh VPS |
 | No lockout | Password auth stays on until you confirm the new SSH session works |
 | Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
-| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.11`) instead of `main` |
+| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.12`) instead of `main` |
 | Dokploy installer | Downloaded at runtime and logged before execution; it remains a third-party installer |
 | Safe config parsing | `install-dokploy.sh` reads config via whitelist (no `source` / code execution) |
 | Log | Full log saved to `/var/log/vps_setup.log` |
@@ -363,6 +388,20 @@ The error trap automatically restores SSH access on port 22. Check `/var/log/vps
 <summary><strong>Can I run the script again?</strong></summary>
 
 The script is designed for fresh installs. Use `check.sh` to verify your server's state instead.
+</details>
+
+<details>
+<summary><strong>Why does `docker ps` say permission denied?</strong></summary>
+
+This is expected in strict Docker CLI mode. The admin user is not added to the `docker` group because Docker daemon access is root-equivalent.
+
+Use:
+
+```bash
+sudo docker ps
+```
+
+Dokploy, Docker, Traefik, Postgres, and Redis continue running normally. Only manual Docker CLI commands require `sudo`.
 </details>
 
 <details>
