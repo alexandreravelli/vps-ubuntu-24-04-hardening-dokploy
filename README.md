@@ -30,7 +30,7 @@ sudo -i
 ```
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.7/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.8/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 The script answers all your questions first, then applies hardening automatically. If your SSH session drops during hardening, the script continues in the background — reconnect with `screen -r hardening`.
@@ -59,9 +59,9 @@ sudo ./install-dokploy.sh
 | Port | Protocol | Purpose | When to close |
 |------|----------|---------|---------------|
 | 22 | TCP | SSH (default, script will move it) | After confirming new SSH port works |
-| 80 | TCP | HTTP / SSL certificate validation | Keep open |
+| 80 | TCP | HTTP / HTTPS certificate validation | Keep open |
 | 443 | TCP | HTTPS | Keep open |
-| 3000 | TCP | Dokploy initial setup | After configuring your domain + SSL |
+| 3000 | TCP | Dokploy initial setup | After configuring your domain + HTTPS |
 | *custom* | TCP | New SSH port (shown before setup starts and saved at the end) | Keep open |
 
 > The exact SSH port is displayed before setup starts and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
@@ -99,7 +99,7 @@ Phase 3 — SSH test + CONFIRM     (interactive — if SSH drops, server is safe
 | # | Step | What happens | Time |
 |---|------|-------------|------|
 | 1 | **Docker** | Official APT repo + GPG + log rotation + Content Trust | ~2-3min |
-| 2 | **Firewall** | DOCKER-USER deny-by-default, allow 80 + 443 + 3000 (temporary) | ~5s |
+| 2 | **Firewall** | DOCKER-USER deny-by-default, allow 80 + 443 + temporary 3000 | ~5s |
 | 3 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~2-5min |
 
 > This script reads the config saved by `setup.sh` (`/root/.vps_hardening_config`) — no need to re-enter anything.
@@ -152,7 +152,7 @@ sudo ./install-dokploy.sh
 
 1. Create your admin account at `http://your-ip:3000`
 2. **Enable MFA** on your Dokploy account (Settings > Security)
-3. Configure your domain + SSL in Dokploy
+3. Configure your domain + HTTPS in Dokploy
 4. Close port 3000 (only needed for initial setup):
 
 Remove from UFW (host firewall):
@@ -298,7 +298,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | APT lock handling | Waits up to 120s for `unattended-upgrades` to release dpkg lock on fresh VPS |
 | No lockout | Password auth stays on until you confirm the new SSH session works |
 | Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
-| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.7`) instead of `main` |
+| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.8`) instead of `main` |
 | Dokploy installer | Downloaded at runtime and logged before execution; it remains a third-party installer |
 | Safe config parsing | `install-dokploy.sh` reads config via whitelist (no `source` / code execution) |
 | Log | Full log saved to `/var/log/vps_setup.log` |

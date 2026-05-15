@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.7"
+VERSION="1.0.8"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -238,7 +238,7 @@ gum style --bold --foreground 6 "  WHAT IT DOES"
 gum style --foreground 240 "  ────────────────────────────────────────────────"
 echo ""
 printf "  $(gum style --foreground 240 '1')  Docker: official APT repo + GPG + log rotation\n"
-printf "  $(gum style --foreground 240 '2')  Firewall: DOCKER-USER deny-by-default + allow 80/443/3000\n"
+printf "  $(gum style --foreground 240 '2')  Firewall: DOCKER-USER deny-by-default + allow 80/443 + temporary 3000\n"
 printf "  $(gum style --foreground 240 '3')  Dokploy: self-hosted PaaS at port 3000\n"
 echo ""
 
@@ -248,13 +248,16 @@ gum style \
     --foreground 3 \
     --padding "0 2" \
     --margin "0 2" \
-    "⚠  If you have an external firewall, open port 3000 before continuing." \
-    "   Port 3000 is temporary — close it after configuring SSL in Dokploy." \
-    "   Keep your custom SSH port open in the provider firewall."
+    "⚠  PROVIDER FIREWALL CHECK" \
+    "Open TCP 3000 temporarily before continuing." \
+    "Keep your custom SSH port open." \
+    "Close TCP 3000 after domain + HTTPS setup in Dokploy."
 
 echo ""
+gum style --foreground 6 --bold "  STATUS: No Docker or Dokploy changes have been made yet."
+echo ""
 
-gum confirm "Ready to install Docker + Dokploy?" || { echo "Install cancelled."; exit 0; }
+gum confirm "Start Docker + Dokploy install now?" || { echo "Install cancelled."; exit 0; }
 
 START_TIME=$SECONDS
 echo "=== Docker + Dokploy Install - $(date) ===" >> "$LOG_FILE"
@@ -321,7 +324,7 @@ sudo tee /usr/local/bin/docker-firewall.sh > /dev/null << 'FWSCRIPT'
 #!/bin/bash
 # Persistent DOCKER-USER rules — re-applied after Docker starts on each boot.
 # Port 3000 (Dokploy UI) is NOT included here: it is opened temporarily during
-# initial setup and should be closed manually after SSL is configured.
+# initial setup and should be closed manually after domain + HTTPS is configured.
 for cmd in iptables ip6tables; do
     "$cmd" -L DOCKER-USER -n &>/dev/null 2>&1 || continue
     "$cmd" -F DOCKER-USER
@@ -515,8 +518,8 @@ echo ""
 gum style --bold --foreground 2 "  NEXT STEPS"
 gum style --foreground 240 "  ──────────────────────────────────────────────────"
 printf "  $(gum style --bold --foreground 6 '1')  Open http://%s:3000 and create your admin account\n" "$PUBLIC_IP"
-printf "  $(gum style --bold --foreground 6 '2')  Configure a domain + SSL in Dokploy\n"
-printf "  $(gum style --bold --foreground 6 '3')  Close port 3000 after SSL is configured:\n"
+printf "  $(gum style --bold --foreground 6 '2')  Configure a domain + HTTPS in Dokploy\n"
+printf "  $(gum style --bold --foreground 6 '3')  Close port 3000 after domain + HTTPS is configured:\n"
 printf "       sudo ufw delete allow 3000/tcp\n"
 printf "       sudo iptables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT\n"
 printf "       sudo ip6tables -D DOCKER-USER -p tcp --dport 3000 -j ACCEPT 2>/dev/null || true\n"
