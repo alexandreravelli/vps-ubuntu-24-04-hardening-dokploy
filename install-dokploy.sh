@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.10"
+VERSION="1.0.11"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -289,8 +289,8 @@ echo \
 
 run_with_spinner "Updating Docker repository" sudo apt-get update -qq
 run_with_log "Installing Docker Engine" sudo apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-sudo usermod -aG docker "$NEW_USER"
 log "Docker installed (official APT repo with GPG)"
+log "Strict Docker CLI mode enabled (use sudo docker; user not added to docker group)"
 
 sudo mkdir -p /etc/docker
 if [ "$LOG_DAYS" -le 90 ]; then

@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.10"
+VERSION="1.0.11"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Check v$VERSION"
@@ -647,6 +647,13 @@ if command -v docker &>/dev/null; then
         fail "Docker no-new-privileges NOT enabled"
     fi
 
+    DOCKER_GROUP_USERS=$(getent group docker 2>/dev/null | cut -d: -f4)
+    if [ -z "$DOCKER_GROUP_USERS" ]; then
+        pass "Strict Docker CLI mode active (no users in docker group)"
+    else
+        warn_check "Users in docker group have root-equivalent Docker access: $DOCKER_GROUP_USERS"
+        warn_check "Strict mode: remove users from docker group and use sudo docker"
+    fi
 
     if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
         pass "DOCKER-USER deny-by-default rule present (IPv4)"

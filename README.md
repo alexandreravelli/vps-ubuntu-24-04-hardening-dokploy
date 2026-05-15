@@ -30,7 +30,7 @@ sudo -i
 ```
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.10/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.11/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 The script answers all your questions first, then applies hardening automatically. If your SSH session drops during hardening, the script continues in the background — reconnect with `screen -r hardening`.
@@ -103,6 +103,8 @@ Phase 3 — SSH test + CONFIRM     (interactive — if SSH drops, server is safe
 | 3 | **Dokploy** | Self-hosted PaaS, ready at `http://your-ip:3000` | ~2-5min |
 
 > This script reads the config saved by `setup.sh` (`/root/.vps_hardening_config`) — no need to re-enter anything.
+
+> Docker CLI uses strict mode by default: the admin user is **not** added to the `docker` group. Use `sudo docker ...` for manual Docker commands.
 
 ### Why two scripts?
 
@@ -277,6 +279,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | Feature | Details |
 |---------|---------|
 | Docker install | Official APT repo with GPG fingerprint verification |
+| Strict Docker CLI | Admin user is not added to the `docker` group; manual Docker commands require `sudo docker` |
 | Docker Swarm | Initialized by Dokploy (required for Traefik) |
 | Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
 | No privilege escalation | `no-new-privileges` in daemon.json |
@@ -300,7 +303,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | APT lock handling | Waits up to 120s for `unattended-upgrades` to release dpkg lock on fresh VPS |
 | No lockout | Password auth stays on until you confirm the new SSH session works |
 | Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
-| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.10`) instead of `main` |
+| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.11`) instead of `main` |
 | Dokploy installer | Downloaded at runtime and logged before execution; it remains a third-party installer |
 | Safe config parsing | `install-dokploy.sh` reads config via whitelist (no `source` / code execution) |
 | Log | Full log saved to `/var/log/vps_setup.log` |
