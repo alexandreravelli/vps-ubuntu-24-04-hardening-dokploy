@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.4"
+VERSION="1.0.5"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -1105,13 +1105,22 @@ gum style \
     --padding "0 2" \
     --margin "0 2" \
     --bold \
-    "CRITICAL: Test your SSH connection before continuing" \
+    "CRITICAL: Verify SSH before lock-down" \
     "" \
-    "External firewall (OVH, Hetzner, AWS...): open port $SSH_PORT first." \
-    "Open a NEW terminal and run:"
+    "Keep this terminal open." \
+    "Open port $SSH_PORT in your provider firewall if needed." \
+    "Then open a NEW terminal and test:"
 copy_block "ssh $NEW_USER@$SSH_HOST -p $SSH_PORT"
 
-if gum confirm "Did SSH work on port $SSH_PORT?"; then
+gum style \
+    --foreground 3 \
+    "  Only choose Yes if the NEW SSH session works." \
+    "" \
+    "  Yes: close port 22, disable password SSH, reboot" \
+    "  No:  keep port 22 and password SSH open for recovery"
+echo ""
+
+if gum confirm "Did the NEW SSH connection work?"; then
     echo ""
     gum style \
         --border rounded \
