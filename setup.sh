@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.2"
+VERSION="1.0.3"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -246,7 +246,7 @@ gum style \
     --align center \
     "VPS HARDENING SCRIPT" \
     "" \
-    "Ubuntu 24.04 LTS · Secure in 5 minutes" \
+    "Harden a fresh Ubuntu 24.04 VPS in about 5 minutes" \
     "7 steps · Key-only SSH · Firewall · Kernel hardening"
 
 echo ""
@@ -260,7 +260,7 @@ printf "  $(gum style --foreground 240 '3')  Update system, auto-sized swap, DNS
 printf "  $(gum style --foreground 240 '4')  Kernel hardening: anti-spoofing, ASLR, SYN\n"
 printf "  $(gum style --foreground 240 '5')  Install UFW · Fail2Ban · AppArmor · auditd · log retention\n"
 printf "  $(gum style --foreground 240 '6')  Firewall: deny-by-default, allow custom SSH + 80 + 443\n"
-printf "  $(gum style --foreground 240 '7')  SSH: random port 50000-60000, key-only auth\n"
+printf "  $(gum style --foreground 240 '7')  SSH: random port 50000-60000, key-only auth after confirmation\n"
 echo ""
 
 gum style --bold --foreground 2 "  PREREQUISITES"
@@ -313,8 +313,10 @@ if [ "$HAS_CLOUD_FIREWALL" = true ]; then
         --foreground 3 \
         --padding "0 2" \
         --margin "0 2" \
-        "⚠  EXTERNAL FIREWALL DETECTED" \
+        "⚠  PROVIDER FIREWALL CHECK" \
         "Open these ports in your provider's control panel BEFORE running:" \
+        "" \
+        "$(printf '  YOUR NEW SSH PORT: %s' "$SSH_PORT")" \
         "" \
         "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
         "$(printf '  %5s        HTTP' '80')" \
@@ -327,18 +329,21 @@ else
         --foreground 3 \
         --padding "0 2" \
         --margin "0 2" \
-        "⚠  EXTERNAL FIREWALL" \
+        "⚠  PROVIDER FIREWALL CHECK" \
         "If your provider has a network firewall, open these ports BEFORE running:" \
+        "" \
+        "$(printf '  YOUR NEW SSH PORT: %s' "$SSH_PORT")" \
         "" \
         "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
         "$(printf '  %5s        HTTP' '80')" \
         "$(printf '  %5s        HTTPS' '443')" \
-        "" \
-        "The final custom SSH port will be shown at the end."
+        "$(printf '  %5s        SSH (custom port for this install)' "$SSH_PORT")"
 fi
 
 echo ""
-gum confirm "Ready to start?" || { echo "Setup cancelled."; exit 0; }
+gum style --foreground 240 "  No system changes have been made yet."
+echo ""
+gum confirm "Start hardening now?" || { echo "Setup cancelled."; exit 0; }
 
 # --- Collect hostname ---
 input_banner "Choose a hostname for this server (e.g. web-prod-01)"
