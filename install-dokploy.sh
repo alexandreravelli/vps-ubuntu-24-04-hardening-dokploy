@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.8"
+VERSION="1.0.9"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -464,6 +464,19 @@ elif ! [ -f /run/sshd-hardened.pid ] && ! systemctl is-active ssh.service &>/dev
 fi
 
 log "Post-Dokploy recovery complete — all services verified"
+
+# Docker/Dokploy or distro defaults can re-apply sysctl values after setup.sh.
+# Re-assert the critical runtime values discovered during VPS validation.
+sudo sysctl -w net.ipv4.conf.all.log_martians=1 > /dev/null
+sudo sysctl -w net.ipv4.conf.default.log_martians=1 > /dev/null
+sudo sysctl -w fs.suid_dumpable=0 > /dev/null
+sudo sysctl -w fs.protected_fifos=2 > /dev/null
+log "Critical sysctl runtime values re-applied"
+
+if [ ! -f /run/sshd-hardened.pid ]; then
+    sudo rm -f /etc/ssh/sshd_test_config /etc/ssh/sshd_config.d/zz-setup-keepalive.conf
+    log "Temporary SSH setup files removed"
+fi
 
 # Wait for Dokploy to be ready
 gum spin --spinner dot --title "Waiting for Dokploy to start..." -- bash -c '

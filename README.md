@@ -30,7 +30,7 @@ sudo -i
 ```
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.8/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.9/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 The script answers all your questions first, then applies hardening automatically. If your SSH session drops during hardening, the script continues in the background — reconnect with `screen -r hardening`.
@@ -183,6 +183,8 @@ sudo ./cleanup.sh
 
 Or directly: `sudo ./cleanup.sh ubuntu`
 
+> This also removes stale direct sudoers entries for the deleted user, validates sudoers with `visudo`, and removes temporary SSH setup files when no standalone test sshd is running.
+
 ### 5. Run security audit
 
 ```bash
@@ -261,7 +263,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | Feature | Details |
 |---------|---------|
 | Password policy | 12+ chars, mixed case, numbers, symbols |
-| Sudo audit | `check.sh` warns about passwordless sudo (`NOPASSWD`) entries |
+| Sudo audit | `check.sh` warns about passwordless sudo (`NOPASSWD`) entries; `cleanup.sh` removes stale direct sudoers entries for deleted users |
 | Audit logging | sudo, auth, SSH, sudoers, kernel modules, time changes, file deletions, immutable config (`-e 2`) |
 | AppArmor | Mandatory access control |
 | Auto-updates | Daily security patches (reboot disabled) |
@@ -298,7 +300,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | APT lock handling | Waits up to 120s for `unattended-upgrades` to release dpkg lock on fresh VPS |
 | No lockout | Password auth stays on until you confirm the new SSH session works |
 | Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
-| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.8`) instead of `main` |
+| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.9`) instead of `main` |
 | Dokploy installer | Downloaded at runtime and logged before execution; it remains a third-party installer |
 | Safe config parsing | `install-dokploy.sh` reads config via whitelist (no `source` / code execution) |
 | Log | Full log saved to `/var/log/vps_setup.log` |
@@ -386,7 +388,7 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 |------|---------|
 | `setup.sh` | Server hardening — 3 phases, 7 steps, survives SSH drops |
 | `install-dokploy.sh` | Docker + Dokploy installer (run after setup.sh) |
-| `cleanup.sh` | Remove the default user |
+| `cleanup.sh` | Remove the default user, stale sudoers entries, and temporary SSH setup files |
 | `check.sh` | Post-install security audit, including sudo, SSH key permissions, and UFW IPv6 coverage |
 | `purge.sh` | Remove setup files from server (safe — never touches SSH keys) |
 | `LICENSE` | MIT license |

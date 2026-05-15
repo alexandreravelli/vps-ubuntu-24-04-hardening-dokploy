@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.8"
+VERSION="1.0.9"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -675,7 +675,7 @@ CURRENT_STEP=4
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Kernel hardening (sysctl)"
 SETUP_PHASE="kernel-hardening"
 
-sudo tee /etc/sysctl.d/99-hardening.conf > /dev/null << EOF
+sudo tee /etc/sysctl.d/99-z-vps-hardening.conf > /dev/null << EOF
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
@@ -707,6 +707,10 @@ dev.tty.ldisc_autoload = 0
 fs.protected_fifos = 2
 EOF
 run_with_spinner "Applying kernel parameters" sudo sysctl --system
+sudo sysctl -w net.ipv4.conf.all.log_martians=1 > /dev/null
+sudo sysctl -w net.ipv4.conf.default.log_martians=1 > /dev/null
+sudo sysctl -w fs.suid_dumpable=0 > /dev/null
+sudo sysctl -w fs.protected_fifos=2 > /dev/null
 log "Kernel hardening applied"
 
 echo '* hard core 0' | sudo tee /etc/security/limits.d/no-core.conf > /dev/null
