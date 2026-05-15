@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.3"
+VERSION="1.0.4"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -347,13 +347,19 @@ gum confirm "Start hardening now?" || { echo "Setup cancelled."; exit 0; }
 
 # --- Collect hostname ---
 input_banner "Choose a hostname for this server (e.g. web-prod-01)"
-INPUT_HOSTNAME=$(gum input --placeholder "Hostname (letters, numbers, hyphens)" --prompt "> " --prompt.foreground 6)
+while true; do
+    INPUT_HOSTNAME=$(gum input --placeholder "Hostname (letters, numbers, hyphens)" --prompt "> " --prompt.foreground 6)
 
-if [ -n "$INPUT_HOSTNAME" ]; then
-    if ! echo "$INPUT_HOSTNAME" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'; then
-        error "Invalid hostname. Use letters, numbers, and hyphens. Must start/end with alphanumeric."
+    if [ -z "$INPUT_HOSTNAME" ]; then
+        break
     fi
-fi
+    if echo "$INPUT_HOSTNAME" | grep -qE '^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'; then
+        break
+    fi
+
+    warn "Invalid hostname. Use letters, numbers, and hyphens only. It must start and end with a letter or number."
+    warn "Example: web-prod-01"
+done
 
 # --- Collect username ---
 input_banner "Choose a username for your admin account"
