@@ -3,7 +3,7 @@
 # Usage: ./cleanup.sh [username]
 set -euo pipefail
 
-VERSION="1.0.9"
+VERSION="1.0.10"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Cleanup v$VERSION"
@@ -62,10 +62,12 @@ error() {
 
 cleanup_sudoers_for_user() {
     local target_user="$1"
-    local backup_dir="/root/vps-hardening-sudoers-backup-$(date +%Y%m%d%H%M%S)"
+    local backup_dir
     local modified=false
     local file backup_path
     local files=()
+
+    backup_dir="/root/vps-hardening-sudoers-backup-$(date +%Y%m%d%H%M%S)"
 
     files+=("/etc/sudoers")
     while IFS= read -r file; do
