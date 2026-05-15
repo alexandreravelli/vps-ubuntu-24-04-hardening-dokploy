@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.1"
+VERSION="1.0.2"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -108,7 +108,7 @@ cleanup_on_error() {
 
         # Re-apply UFW in case Dokploy broke it
         if command -v ufw &>/dev/null; then
-            sudo ufw allow "$SSH_PORT/tcp" 2>/dev/null || true
+            sudo ufw limit "$SSH_PORT/tcp" 2>/dev/null || true
         fi
 
     fi
@@ -429,7 +429,6 @@ sudo ufw disable > /dev/null 2>&1 || true
 sudo ufw --force reset > /dev/null
 sudo ufw default deny incoming > /dev/null
 sudo ufw default allow outgoing > /dev/null
-sudo ufw allow "$SSH_PORT/tcp" > /dev/null
 sudo ufw limit "$SSH_PORT/tcp" > /dev/null
 sudo ufw allow 80/tcp > /dev/null
 sudo ufw allow 443/tcp > /dev/null
