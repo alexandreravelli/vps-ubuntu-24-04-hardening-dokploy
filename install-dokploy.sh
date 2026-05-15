@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.5"
+VERSION="1.0.6"
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
@@ -231,7 +231,7 @@ gum style \
     "DOCKER + DOKPLOY INSTALLER" \
     "" \
     "Self-hosted PaaS · Deny-by-default firewall" \
-    "3 steps · ~5 minutes"
+    "3 steps · about 5-10 minutes"
 
 echo ""
 gum style --bold --foreground 6 "  WHAT IT DOES"
@@ -249,7 +249,8 @@ gum style \
     --padding "0 2" \
     --margin "0 2" \
     "⚠  If you have an external firewall, open port 3000 before continuing." \
-    "   Port 3000 is temporary — close it after configuring SSL in Dokploy."
+    "   Port 3000 is temporary — close it after configuring SSL in Dokploy." \
+    "   Keep your custom SSH port open in the provider firewall."
 
 echo ""
 

@@ -8,8 +8,8 @@
 <h1 align="center">VPS Hardening Script</h1>
 
 <p align="center">
-  <strong>Every security best practice, one script: hardened SSH, firewall, sysctl, ASLR, Fail2Ban, auditd, auto-updates.</strong><br>
-  Your Ubuntu 24.04 VPS, production-ready. Docker + Dokploy optional.<br><br>
+  <strong>A pragmatic hardening baseline for fresh Ubuntu 24.04 VPS servers.</strong><br>
+  Hardened SSH, firewall, sysctl, ASLR, Fail2Ban, auditd, auto-updates. Docker + Dokploy optional.<br><br>
   <a href="#-quick-start">Quick Start</a> · <a href="#-requirements">Requirements</a> · <a href="#%EF%B8%8F-what-it-does">What It Does</a> · <a href="#-after-installation">After Installation</a> · <a href="#-security">Security</a> · <a href="#-faq">FAQ</a>
 </p>
 
@@ -30,7 +30,7 @@ sudo -i
 ```
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.5/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.6/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 The script answers all your questions first, then applies hardening automatically. If your SSH session drops during hardening, the script continues in the background — reconnect with `screen -r hardening`.
@@ -62,9 +62,9 @@ sudo ./install-dokploy.sh
 | 80 | TCP | HTTP / SSL certificate validation | Keep open |
 | 443 | TCP | HTTPS | Keep open |
 | 3000 | TCP | Dokploy initial setup | After configuring your domain + SSL |
-| *custom* | TCP | New SSH port (shown at end of setup.sh) | Keep open |
+| *custom* | TCP | New SSH port (shown before setup starts and saved at the end) | Keep open |
 
-> The exact SSH port is displayed at the end of `setup.sh` and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
+> The exact SSH port is displayed before setup starts and saved in `~/.vps_setup_summary`. Open **only that port** in your provider's firewall — not the entire 50000-60000 range.
 
 ---
 
@@ -72,7 +72,7 @@ sudo ./install-dokploy.sh
 
 ### setup.sh — Server Hardening
 
-**3 phases** · **~5 minutes** · Built on [gum](https://github.com/charmbracelet/gum) for a clean interactive CLI
+**3 phases** · **about 5-10 minutes** · Built on [gum](https://github.com/charmbracelet/gum) for a clean interactive CLI
 
 ```
 Phase 1 — Collect all inputs     (interactive — if SSH drops, nothing is modified)
@@ -90,11 +90,11 @@ Phase 3 — SSH test + CONFIRM     (interactive — if SSH drops, server is safe
 | 6 | **Firewall** | UFW deny-by-default, allow custom SSH port + 80 + 443 | ~5s |
 | 7 | **SSH** | Random port 50000-60000, key-only auth, no root login | ~5s |
 
-> After step 7, the script asks you to test your SSH connection on the new port. Only after typing `CONFIRM` will it close port 22 and disable password auth.
+> After step 7, the script asks you to test a new SSH session on the custom port. Only after you confirm the new SSH session works and type `CONFIRM` will it close port 22 and disable password auth.
 
 ### install-dokploy.sh — Docker + Dokploy
 
-**3 steps** · **~5 minutes** · Run after `setup.sh` is complete and you've reconnected on the new SSH port.
+**3 steps** · **about 5-10 minutes** · Run after `setup.sh` is complete and you've reconnected on the new SSH port.
 
 | # | Step | What happens | Time |
 |---|------|-------------|------|
@@ -203,7 +203,7 @@ sudo ./purge.sh
 
 ## 🔒 Security
 
-The script covers **5 security layers** plus built-in safety mechanisms. No manual configuration required.
+The script applies a production-oriented hardening baseline with **5 security layers** plus built-in safety mechanisms.
 
 <details>
 <summary><strong>🔐 SSH hardening</strong></summary>
@@ -272,7 +272,7 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 
 | Feature | Details |
 |---------|---------|
-| Official install | APT repo with GPG fingerprint verification, not `curl \| sh` |
+| Docker install | Official APT repo with GPG fingerprint verification |
 | Docker Swarm | Initialized by Dokploy (required for Traefik) |
 | Log rotation | 10MB max, scaled to retention policy (3/7/14 files) |
 | No privilege escalation | `no-new-privileges` in daemon.json |
@@ -293,9 +293,10 @@ The script covers **5 security layers** plus built-in safety mechanisms. No manu
 | Summary file | `~/.vps_setup_summary` with all details (chmod 600) |
 | Double confirmation | `CONFIRM` required before closing port 22 |
 | APT lock handling | Waits up to 120s for `unattended-upgrades` to release dpkg lock on fresh VPS |
-| No lockout | Password auth stays on until SSH key is verified |
+| No lockout | Password auth stays on until you confirm the new SSH session works |
 | Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
-| Supply chain | GPG fingerprint verification for Charm and Docker repos, scripts pinned to release tag (`release-1.0.5`) instead of `main` |
+| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.6`) instead of `main` |
+| Dokploy installer | Downloaded at runtime and logged before execution; it remains a third-party installer |
 | Safe config parsing | `install-dokploy.sh` reads config via whitelist (no `source` / code execution) |
 | Log | Full log saved to `/var/log/vps_setup.log` |
 | Safe purge | Scripts stored in `~/vps-hardening/` — purge never touches SSH keys or home directory |

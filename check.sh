@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.5"
+VERSION="1.0.6"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Check v$VERSION"
@@ -645,13 +645,13 @@ TOTAL=$((PASS_COUNT + FAIL_COUNT + WARN_COUNT))
 
 echo ""
 if [ "$FAIL_COUNT" -eq 0 ] && [ "$WARN_COUNT" -eq 0 ]; then
-    VERDICT="Your server is fully hardened."
+    VERDICT="All configured hardening checks passed."
     VERDICT_COLOR=2
 elif [ "$FAIL_COUNT" -eq 0 ]; then
     VERDICT="Mostly hardened. Review warnings above."
     VERDICT_COLOR=3
 else
-    VERDICT="Security issues detected. Fix failures above."
+    VERDICT="Some hardening checks failed. Review failures above."
     VERDICT_COLOR=1
 fi
 

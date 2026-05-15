@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.5"
+VERSION="1.0.6"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -246,7 +246,7 @@ gum style \
     --align center \
     "VPS HARDENING SCRIPT" \
     "" \
-    "Harden a fresh Ubuntu 24.04 VPS in about 5 minutes" \
+    "Harden a fresh Ubuntu 24.04 VPS in about 5-10 minutes" \
     "7 steps · Key-only SSH · Firewall · Kernel hardening"
 
 echo ""
@@ -317,6 +317,7 @@ if [ "$HAS_CLOUD_FIREWALL" = true ]; then
         "Open these ports in your provider's control panel BEFORE running:" \
         "" \
         "$(printf '  YOUR NEW SSH PORT: %s' "$SSH_PORT")" \
+        "  Open this exact SSH port only. Do not open the full 50000-60000 range." \
         "" \
         "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
         "$(printf '  %5s        HTTP' '80')" \
@@ -333,6 +334,7 @@ else
         "If your provider has a network firewall, open these ports BEFORE running:" \
         "" \
         "$(printf '  YOUR NEW SSH PORT: %s' "$SSH_PORT")" \
+        "  Open this exact SSH port only. Do not open the full 50000-60000 range." \
         "" \
         "$(printf '  %5s        SSH (temporary — closed after setup)' '22')" \
         "$(printf '  %5s        HTTP' '80')" \
@@ -341,7 +343,7 @@ else
 fi
 
 echo ""
-gum style --foreground 240 "  No system changes have been made yet."
+gum style --foreground 6 --bold "  STATUS: No system changes have been made yet."
 echo ""
 gum confirm "Start hardening now?" || { echo "Setup cancelled."; exit 0; }
 
@@ -363,17 +365,25 @@ done
 
 # --- Collect username ---
 input_banner "Choose a username for your admin account"
-NEW_USER=$(gum input --placeholder "Username (lowercase, letters/numbers/hyphens)" --prompt "> " --prompt.foreground 6)
+while true; do
+    NEW_USER=$(gum input --placeholder "Username (e.g. deploy-admin)" --prompt "> " --prompt.foreground 6)
 
-if [ -z "$NEW_USER" ]; then
-    error "Username cannot be empty"
-fi
-if ! echo "$NEW_USER" | grep -qE '^[a-z][a-z0-9_-]*$'; then
-    error "Invalid username. Use lowercase letters, numbers, underscores, hyphens. Must start with a letter."
-fi
-if id "$NEW_USER" &>/dev/null; then
-    error "User '$NEW_USER' already exists"
-fi
+    if [ -z "$NEW_USER" ]; then
+        warn "Username cannot be empty."
+        warn "Example: deploy-admin"
+        continue
+    fi
+    if ! echo "$NEW_USER" | grep -qE '^[a-z][a-z0-9_-]*$'; then
+        warn "Invalid username. Use lowercase letters, numbers, underscores, or hyphens. It must start with a letter."
+        warn "Example: deploy-admin"
+        continue
+    fi
+    if id "$NEW_USER" &>/dev/null; then
+        warn "User '$NEW_USER' already exists. Choose a different admin username."
+        continue
+    fi
+    break
+done
 
 # --- Collect password ---
 input_banner "Set password for $NEW_USER (min 12 chars, mixed case, numbers, symbols)"
@@ -419,14 +429,22 @@ if [[ "$SSH_METHOD" == *"Generate"* ]]; then
         done
     fi
 else
-    input_banner "Paste your SSH public key (ssh-ed25519 or ssh-rsa)"
-    INPUT_SSH_KEY=$(gum write --placeholder "Paste your key here (ssh-ed25519 AAAA... or ssh-rsa AAAA...) then press Ctrl+D" --width 120 --char-limit 0)
-    if [ -z "$INPUT_SSH_KEY" ]; then
-        error "SSH key cannot be empty"
-    fi
-    if ! echo "$INPUT_SSH_KEY" | grep -qE "^(ssh-rsa|ssh-ed25519|ecdsa-sha2)"; then
-        error "Invalid SSH key format"
-    fi
+    while true; do
+        input_banner "Paste your SSH public key (ssh-ed25519 or ssh-rsa)"
+        INPUT_SSH_KEY=$(gum write --placeholder "Paste your key here (ssh-ed25519 AAAA... or ssh-rsa AAAA...) then press Ctrl+D" --width 120 --char-limit 0)
+        INPUT_SSH_KEY=$(echo "$INPUT_SSH_KEY" | tr -d '\r' | sed '/^[[:space:]]*$/d' | head -n 1)
+        if [ -z "$INPUT_SSH_KEY" ]; then
+            warn "SSH public key cannot be empty."
+            warn "Example: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... your-name"
+            continue
+        fi
+        if ! echo "$INPUT_SSH_KEY" | grep -qE "^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp[0-9]+)[[:space:]]+[A-Za-z0-9+/=]+"; then
+            warn "Invalid SSH public key format."
+            warn "Paste a public key starting with ssh-ed25519, ssh-rsa, or ecdsa-sha2-nistp256."
+            continue
+        fi
+        break
+    done
 fi
 
 # --- Collect log retention ---
@@ -446,11 +464,14 @@ case "$LOG_RETENTION_CHOICE" in
     "Compliance (2 years)") LOG_DAYS=730 ;;
     "Custom")
         input_banner "Enter custom retention period in days"
-        LOG_DAYS=$(gum input --placeholder "Number of days (e.g. 180)" --prompt "> " --prompt.foreground 6)
-        if ! echo "$LOG_DAYS" | grep -qE '^[0-9]+$' || [ "$LOG_DAYS" -lt 1 ]; then
-            warn "Invalid number -- defaulting to 90 days"
-            LOG_DAYS=90
-        fi
+        while true; do
+            LOG_DAYS=$(gum input --placeholder "Number of days (e.g. 180)" --prompt "> " --prompt.foreground 6)
+            if echo "$LOG_DAYS" | grep -qE '^[0-9]+$' && [ "$LOG_DAYS" -ge 1 ]; then
+                break
+            fi
+            warn "Invalid retention period. Enter a whole number greater than 0."
+            warn "Example: 180"
+        done
         ;;
 esac
 
@@ -1108,7 +1129,8 @@ gum style \
     "CRITICAL: Verify SSH before lock-down" \
     "" \
     "Keep this terminal open." \
-    "Open port $SSH_PORT in your provider firewall if needed." \
+    "Open exact port $SSH_PORT in your provider firewall if needed." \
+    "Do not open the full 50000-60000 range." \
     "Then open a NEW terminal and test:"
 copy_block "ssh $NEW_USER@$SSH_HOST -p $SSH_PORT"
 
@@ -1116,7 +1138,7 @@ gum style \
     --foreground 3 \
     "  Only choose Yes if the NEW SSH session works." \
     "" \
-    "  Yes: close port 22, disable password SSH, reboot" \
+    "  Yes: port 22 closes, password SSH is disabled, server may reboot" \
     "  No:  keep port 22 and password SSH open for recovery"
 echo ""
 
@@ -1129,7 +1151,7 @@ if gum confirm "Did the NEW SSH connection work?"; then
         --padding "0 2" \
         --margin "0 2" \
         "⚠  This will permanently close port 22 and disable password auth." \
-        "Make sure you can connect via:"
+        "Continue only if you confirmed the new SSH session works:"
     copy_block "ssh $NEW_USER@$SSH_HOST -p $SSH_PORT"
 
     CONFIRM_CLOSE=$(gum input --placeholder "Type CONFIRM to proceed, anything else to cancel" --prompt "> " --prompt.foreground 3)
