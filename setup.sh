@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="5.1.0"
+VERSION="1.0.0"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -1017,14 +1017,14 @@ SCRIPTS_DIR="$USER_HOME/vps-hardening"
 sudo mkdir -p "$SCRIPTS_DIR"
 # Pin to release tag (not main) so a compromised main branch cannot inject code
 # into servers that already ran setup.sh with this version.
-REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/v${VERSION}"
+REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-${VERSION}"
 REPO_FALLBACK="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/main"
 
 for script in cleanup.sh check.sh purge.sh install-dokploy.sh; do
     if curl -sSL --fail "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
         chmod +x "$SCRIPTS_DIR/$script"
     elif curl -sSL --fail "$REPO_FALLBACK/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
-        warn "$script: tag v${VERSION} not found, downloaded from main branch"
+        warn "$script: tag release-${VERSION} not found, downloaded from main branch"
         chmod +x "$SCRIPTS_DIR/$script"
     else
         warn "Could not download $script"
