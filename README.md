@@ -30,7 +30,7 @@ sudo -i
 ```
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.6/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
+curl -sSL https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-1.0.7/setup.sh -o setup.sh && chmod +x setup.sh && ./setup.sh
 ```
 
 The script answers all your questions first, then applies hardening automatically. If your SSH session drops during hardening, the script continues in the background — reconnect with `screen -r hardening`.
@@ -230,6 +230,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | Feature | Details |
 |---------|---------|
 | UFW firewall | deny-by-default, allow custom SSH port + 80 + 443 |
+| IPv6 coverage | `check.sh` warns if a global IPv6 address exists but UFW IPv6 support/rules are missing |
 | DOCKER-USER chain | deny-by-default for Docker containers, allow 80 + 443 + internal networks — persisted via `docker-firewall.service` (survives Docker restarts) |
 | Rate limiting | 6 connections/30s per IP on custom SSH port |
 | Fail2Ban | 3 attempts = 24h ban, progressive (doubles on repeat offenders) |
@@ -260,6 +261,7 @@ The script applies a production-oriented hardening baseline with **5 security la
 | Feature | Details |
 |---------|---------|
 | Password policy | 12+ chars, mixed case, numbers, symbols |
+| Sudo audit | `check.sh` warns about passwordless sudo (`NOPASSWD`) entries |
 | Audit logging | sudo, auth, SSH, sudoers, kernel modules, time changes, file deletions, immutable config (`-e 2`) |
 | AppArmor | Mandatory access control |
 | Auto-updates | Daily security patches (reboot disabled) |
@@ -291,11 +293,12 @@ The script applies a production-oriented hardening baseline with **5 security la
 | Error trap | Restores SSH access on port 22 if setup fails |
 | Config backup | `sshd_config.bak` saved before changes |
 | Summary file | `~/.vps_setup_summary` with all details (chmod 600) |
+| SSH key permissions | `check.sh` verifies `~/.ssh` and `authorized_keys` ownership and permissions |
 | Double confirmation | `CONFIRM` required before closing port 22 |
 | APT lock handling | Waits up to 120s for `unattended-upgrades` to release dpkg lock on fresh VPS |
 | No lockout | Password auth stays on until you confirm the new SSH session works |
 | Auto-lockdown | If Phase 3 CONFIRM is not completed within 24h, port 22 and password auth are automatically closed |
-| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.6`) instead of `main` |
+| Supply chain | Charm and Docker repositories use GPG fingerprint verification; project scripts are pinned to release tag (`release-1.0.7`) instead of `main` |
 | Dokploy installer | Downloaded at runtime and logged before execution; it remains a third-party installer |
 | Safe config parsing | `install-dokploy.sh` reads config via whitelist (no `source` / code execution) |
 | Log | Full log saved to `/var/log/vps_setup.log` |
@@ -384,7 +387,7 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 | `setup.sh` | Server hardening — 3 phases, 7 steps, survives SSH drops |
 | `install-dokploy.sh` | Docker + Dokploy installer (run after setup.sh) |
 | `cleanup.sh` | Remove the default user |
-| `check.sh` | Post-install security audit |
+| `check.sh` | Post-install security audit, including sudo, SSH key permissions, and UFW IPv6 coverage |
 | `purge.sh` | Remove setup files from server (safe — never touches SSH keys) |
 | `LICENSE` | MIT license |
 

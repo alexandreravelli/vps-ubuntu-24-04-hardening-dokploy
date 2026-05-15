@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.6"
+VERSION="1.0.7"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Check v$VERSION"
@@ -14,11 +14,9 @@ fi
 
 # === ROOT CHECK ===
 if [ "$(id -u)" -ne 0 ]; then
-    if ! sudo -n true 2>/dev/null; then
-        echo "This script needs root privileges for accurate results."
-        echo "Re-running with sudo..."
-        exec sudo bash "$0" "$@"
-    fi
+    echo "This script needs root privileges for accurate results."
+    echo "Re-running with sudo..."
+    exec sudo bash "$0" "$@"
 fi
 
 # === INSTALL GUM IF NEEDED ===
@@ -68,6 +66,61 @@ section() {
     echo ""
     gum style --bold --foreground 6 "  $1"
     gum style --foreground 240 "  ──────────────────────────────────────────────"
+}
+
+check_ssh_permissions_for_user() {
+    local user="$1"
+    local home_dir
+    home_dir=$(getent passwd "$user" 2>/dev/null | cut -d: -f6)
+
+    if [ -z "$home_dir" ] || [ ! -d "$home_dir" ]; then
+        warn_check "Cannot inspect SSH permissions for '$user' (home directory not found)"
+        return
+    fi
+
+    local ssh_dir="$home_dir/.ssh"
+    local authorized_keys="$ssh_dir/authorized_keys"
+
+    if [ ! -d "$ssh_dir" ]; then
+        warn_check "$user: ~/.ssh directory not found"
+        return
+    fi
+
+    local ssh_mode ssh_owner keys_mode keys_owner
+    ssh_mode=$(sudo stat -c '%a' "$ssh_dir" 2>/dev/null || echo "unknown")
+    ssh_owner=$(sudo stat -c '%U' "$ssh_dir" 2>/dev/null || echo "unknown")
+
+    if [ "$ssh_mode" = "700" ]; then
+        pass "$user: ~/.ssh permissions are 700"
+    else
+        warn_check "$user: ~/.ssh permissions are $ssh_mode (expected 700)"
+    fi
+
+    if [ "$ssh_owner" = "$user" ]; then
+        pass "$user: ~/.ssh owner is correct"
+    else
+        warn_check "$user: ~/.ssh owner is $ssh_owner (expected $user)"
+    fi
+
+    if [ ! -f "$authorized_keys" ]; then
+        warn_check "$user: authorized_keys not found"
+        return
+    fi
+
+    keys_mode=$(sudo stat -c '%a' "$authorized_keys" 2>/dev/null || echo "unknown")
+    keys_owner=$(sudo stat -c '%U' "$authorized_keys" 2>/dev/null || echo "unknown")
+
+    if [ "$keys_mode" = "600" ]; then
+        pass "$user: authorized_keys permissions are 600"
+    else
+        warn_check "$user: authorized_keys permissions are $keys_mode (expected 600)"
+    fi
+
+    if [ "$keys_owner" = "$user" ]; then
+        pass "$user: authorized_keys owner is correct"
+    else
+        warn_check "$user: authorized_keys owner is $keys_owner (expected $user)"
+    fi
 }
 
 # === HEADER ===
@@ -198,6 +251,24 @@ else
     warn_check "AllowTcpForwarding not restricted"
 fi
 
+section "SSH Key Permissions"
+
+SSH_USERS=""
+if [ -f /etc/ssh/sshd_config.d/hardening.conf ]; then
+    SSH_USERS=$(grep "^AllowUsers " /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null | awk '{$1=""; print $0}' | xargs || true)
+fi
+if [ -z "$SSH_USERS" ] && sudo test -f /root/.vps_hardening_config 2>/dev/null; then
+    SSH_USERS=$(sudo grep "^NEW_USER=" /root/.vps_hardening_config 2>/dev/null | tail -1 | cut -d= -f2- || true)
+fi
+
+if [ -n "$SSH_USERS" ]; then
+    for ssh_user in $SSH_USERS; do
+        check_ssh_permissions_for_user "$ssh_user"
+    done
+else
+    warn_check "No admin SSH user found in AllowUsers or /root/.vps_hardening_config"
+fi
+
 # === FIREWALL ===
 section "Firewall (UFW)"
 
@@ -218,8 +289,36 @@ if sudo ufw status | grep -q "Status: active"; then
     else
         fail "Default incoming policy is NOT deny"
     fi
+
+    if ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
+        if grep -qE '^IPV6=yes' /etc/default/ufw 2>/dev/null; then
+            pass "UFW IPv6 support enabled"
+        else
+            warn_check "Global IPv6 detected but UFW IPv6 support is not enabled (/etc/default/ufw IPV6=yes)"
+        fi
+
+        if sudo ufw status | grep -q "(v6)"; then
+            pass "UFW has IPv6 rules loaded"
+        else
+            warn_check "Global IPv6 detected but no UFW IPv6 rules are visible"
+        fi
+    else
+        pass "No global IPv6 address detected"
+    fi
 else
     fail "UFW is NOT active"
+fi
+
+# === SUDO ===
+section "Sudo"
+
+NOPASSWD_ENTRIES=$(sudo grep -RhsE '^[[:space:]]*[^#].*NOPASSWD' /etc/sudoers /etc/sudoers.d 2>/dev/null || true)
+if [ -n "$NOPASSWD_ENTRIES" ]; then
+    warn_check "Passwordless sudo entries found"
+    printf '%s\n' "$NOPASSWD_ENTRIES" | sed 's/^/    /'
+    warn_check "Review these entries and remove old default users with cleanup.sh when safe"
+else
+    pass "No passwordless sudo entries found"
 fi
 
 # === FAIL2BAN ===
