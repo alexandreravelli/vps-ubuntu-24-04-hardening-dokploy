@@ -18,8 +18,6 @@ Please do not open a public GitHub issue for security vulnerabilities.
 If you believe you found a vulnerability, report it privately using GitHub Security Advisories when available, or contact the maintainer directly:
 
 - GitHub: `@alexandreravelli`
-- Email: `ravelli.alexandre@gmail.com`
-
 Include as much detail as possible:
 
 - Affected script and release tag
