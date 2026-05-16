@@ -669,23 +669,75 @@ if command -v docker &>/dev/null; then
         warn_check "Strict mode: remove users from docker group and use sudo docker"
     fi
 
-    if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
-        pass "DOCKER-USER deny-by-default rule present (IPv4)"
-    else
-        warn_check "DOCKER-USER DROP rule missing -- Docker containers may be exposed"
-    fi
+    check_docker_user_order() {
+        local cmd="$1"
+        local label="$2"
+        local internal_source_regex="$3"
+        local rules
+        local rule_count
+        local drop_line
+        local port_80_line
+        local port_443_line
+        local unexpected_accepts
 
-    if sudo ip6tables -L DOCKER-USER -n 2>/dev/null | grep -q "DROP"; then
-        pass "DOCKER-USER deny-by-default rule present (IPv6)"
-    else
-        warn_check "DOCKER-USER IPv6 DROP rule missing -- Docker containers may be exposed on IPv6"
-    fi
+        rules=$(sudo "$cmd" -S DOCKER-USER 2>/dev/null | grep "^-A DOCKER-USER " || true)
+        if [ -z "$rules" ]; then
+            fail "DOCKER-USER chain missing or empty ($label)"
+            return
+        fi
 
-    if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -qE "dpt:80|dpt:443"; then
-        pass "DOCKER-USER allows ports 80 and 443"
-    else
-        warn_check "DOCKER-USER missing ACCEPT rules for 80/443"
-    fi
+        rule_count=$(printf '%s\n' "$rules" | wc -l | xargs)
+        drop_line=$(printf '%s\n' "$rules" | awk '/ -j DROP$/ { line = NR } END { print line }')
+
+        if [ -z "$drop_line" ]; then
+            fail "DOCKER-USER missing final DROP rule ($label)"
+            return
+        fi
+
+        if [ "$drop_line" -eq "$rule_count" ]; then
+            pass "DOCKER-USER final DROP rule is last ($label)"
+        else
+            fail "DOCKER-USER DROP rule is not last ($label)"
+        fi
+
+        if printf '%s\n' "$rules" | awk '/--dport 3000/ && / -j ACCEPT$/ { found = 1 } END { exit !found }'; then
+            fail "DOCKER-USER still allows Dokploy setup port 3000 ($label)"
+        else
+            pass "DOCKER-USER does not expose Dokploy setup port 3000 ($label)"
+        fi
+
+        port_80_line=$(printf '%s\n' "$rules" | awk '/--dport 80/ && / -j ACCEPT$/ { print NR; exit }')
+        port_443_line=$(printf '%s\n' "$rules" | awk '/--dport 443/ && / -j ACCEPT$/ { print NR; exit }')
+
+        if [ -n "$port_80_line" ] && [ "$port_80_line" -lt "$drop_line" ] &&
+           [ -n "$port_443_line" ] && [ "$port_443_line" -lt "$drop_line" ]; then
+            pass "DOCKER-USER allows ports 80 and 443 before DROP ($label)"
+        else
+            fail "DOCKER-USER missing ACCEPT rules for 80/443 before DROP ($label)"
+        fi
+
+        unexpected_accepts=$(
+            printf '%s\n' "$rules" | awk -v drop_line="$drop_line" -v internal_source_regex="$internal_source_regex" '
+                NR < drop_line && / -j ACCEPT$/ {
+                    if ($0 ~ /--ctstate RELATED,ESTABLISHED/) next
+                    if ($0 ~ /-i lo /) next
+                    if ($0 ~ /--dport (80|443) /) next
+                    if ($0 ~ internal_source_regex) next
+                    print
+                }
+            '
+        )
+
+        if [ -n "$unexpected_accepts" ]; then
+            fail "DOCKER-USER has unexpected ACCEPT rules before DROP ($label)"
+            printf '%s\n' "$unexpected_accepts" | sed 's/^/    /'
+        else
+            pass "DOCKER-USER has no broad ACCEPT before DROP ($label)"
+        fi
+    }
+
+    check_docker_user_order "iptables" "IPv4" "-s (172\\.16\\.0\\.0/12|10\\.0\\.0\\.0/8)"
+    check_docker_user_order "ip6tables" "IPv6" "-s fd00::/8"
 
     if systemctl is-active docker-firewall &>/dev/null; then
         pass "docker-firewall.service active (DOCKER-USER rules persist across Docker restarts)"
@@ -703,14 +755,6 @@ if command -v docker &>/dev/null; then
         pass "DOCKER-USER allows Docker internal IPv6 (fd00::/8)"
     else
         warn_check "DOCKER-USER missing Docker internal IPv6 rule (fd00::/8)"
-    fi
-
-    if sudo iptables -L DOCKER-USER -n 2>/dev/null | grep -q "dpt:3000"; then
-        warn_check "DOCKER-USER still allows Dokploy setup port 3000 (close after domain + HTTPS setup)"
-    elif sudo ip6tables -L DOCKER-USER -n 2>/dev/null | grep -q "dpt:3000"; then
-        warn_check "DOCKER-USER IPv6 still allows Dokploy setup port 3000 (close after domain + HTTPS setup)"
-    else
-        pass "DOCKER-USER does not expose Dokploy setup port 3000"
     fi
 
     # === DOKPLOY / TRAEFIK (only if Docker is present) ===

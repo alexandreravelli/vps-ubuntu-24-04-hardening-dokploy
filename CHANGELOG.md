@@ -4,6 +4,12 @@ All notable changes to this project are documented here.
 
 This project uses release tags named `release-<version>`.
 
+## Unreleased
+
+### Added
+- Added strict Docker `DOCKER-USER` rule order validation in `check.sh` to detect broad `ACCEPT` rules before the final `DROP`.
+- Added explicit failures when Dokploy setup port `3000` is still allowed through `DOCKER-USER`.
+
 ## [1.0.13] - 2026-05-16
 
 ### Added
