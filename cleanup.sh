@@ -3,7 +3,7 @@
 # Usage: ./cleanup.sh [username]
 set -euo pipefail
 
-VERSION="1.0.13"
+VERSION="1.0.14"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Cleanup v$VERSION"

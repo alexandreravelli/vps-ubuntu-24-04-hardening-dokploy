@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.13"
+VERSION="1.0.14"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "Docker Public Port Remover v$VERSION"

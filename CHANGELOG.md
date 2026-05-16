@@ -4,7 +4,7 @@ All notable changes to this project are documented here.
 
 This project uses release tags named `release-<version>`.
 
-## Unreleased
+## [1.0.14] - 2026-05-16
 
 ### Added
 - Added `allow-docker-port.sh` to persist one intentional public Docker port through UFW and Docker `DOCKER-USER`.
@@ -74,6 +74,7 @@ This project uses release tags named `release-<version>`.
 ### Changed
 - Added sudo SSH and IPv6 audit checks.
 
+[1.0.14]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.14
 [1.0.13]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.13
 [1.0.12]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.12
 [1.0.11]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.11
