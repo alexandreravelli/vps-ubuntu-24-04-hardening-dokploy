@@ -198,6 +198,13 @@ sudo ./allow-docker-port.sh 51820/udp wg-easy
 
 This updates UFW, persists the port in `/etc/vps-hardening/docker-public-ports.conf`, rebuilds `docker-firewall.service`, and keeps `check.sh` aware that the port is intentional.
 
+To remove that port later:
+
+```bash
+cd ~/vps-hardening/
+sudo ./remove-docker-port.sh 51820/udp
+```
+
 ### 6. Run security audit
 
 ```bash
@@ -442,6 +449,7 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 | `setup.sh` | Server hardening — 3 phases, 7 steps, survives SSH drops |
 | `install-dokploy.sh` | Docker + Dokploy installer (run after setup.sh) |
 | `allow-docker-port.sh` | Allow one intentional public Docker port through UFW + DOCKER-USER |
+| `remove-docker-port.sh` | Remove one intentional public Docker port from UFW + DOCKER-USER |
 | `cleanup.sh` | Remove the default user, stale sudoers entries, and temporary SSH setup files |
 | `check.sh` | Post-install security audit, including sudo, SSH key permissions, and UFW IPv6 coverage |
 | `purge.sh` | Remove setup files from server (safe — never touches SSH keys) |

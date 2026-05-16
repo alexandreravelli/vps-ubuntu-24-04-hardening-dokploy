@@ -20,11 +20,11 @@ jobs:
         run: sudo apt-get install -y shellcheck
 
       - name: Run ShellCheck
-        run: shellcheck -x -s bash -S warning setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh allow-docker-port.sh
+        run: shellcheck -x -s bash -S warning setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh allow-docker-port.sh remove-docker-port.sh
 
       - name: Syntax check
         run: |
-          for f in setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh allow-docker-port.sh; do
+          for f in setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh allow-docker-port.sh remove-docker-port.sh; do
             echo "Checking $f..."
             bash -n "$f"
           done

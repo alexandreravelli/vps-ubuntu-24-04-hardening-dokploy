@@ -8,6 +8,7 @@ This project uses release tags named `release-<version>`.
 
 ### Added
 - Added `allow-docker-port.sh` to persist one intentional public Docker port through UFW and Docker `DOCKER-USER`.
+- Added `remove-docker-port.sh` to remove one intentional public Docker port from UFW and Docker `DOCKER-USER`.
 - Added strict Docker `DOCKER-USER` rule order validation in `check.sh` to detect broad `ACCEPT` rules before the final `DROP`.
 - Added explicit failures when Dokploy setup port `3000` is still allowed through `DOCKER-USER`.
 
