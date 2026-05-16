@@ -669,15 +669,35 @@ if command -v docker &>/dev/null; then
         warn_check "Strict mode: remove users from docker group and use sudo docker"
     fi
 
+    DOCKER_PUBLIC_PORTS="80/tcp 443/tcp"
+    DOCKER_PUBLIC_PORTS_CONFIG="/etc/vps-hardening/docker-public-ports.conf"
+    if [ -f "$DOCKER_PUBLIC_PORTS_CONFIG" ]; then
+        while read -r port_proto _label; do
+            [ -n "${port_proto:-}" ] || continue
+            case "$port_proto" in \#*) continue ;; esac
+            if echo "$port_proto" | grep -qE '^[0-9]+/(tcp|udp)$' &&
+               ! printf '%s\n' $DOCKER_PUBLIC_PORTS | grep -Fxq "$port_proto"; then
+                DOCKER_PUBLIC_PORTS="$DOCKER_PUBLIC_PORTS $port_proto"
+            fi
+        done < "$DOCKER_PUBLIC_PORTS_CONFIG"
+        pass "Docker public ports config loaded ($DOCKER_PUBLIC_PORTS_CONFIG)"
+    else
+        pass "Docker public ports config not found; using defaults (80/tcp 443/tcp)"
+    fi
+
     check_docker_user_order() {
         local cmd="$1"
         local label="$2"
         local internal_source_regex="$3"
+        local configured_ports="$4"
         local rules
         local rule_count
         local drop_line
-        local port_80_line
-        local port_443_line
+        local missing_ports=""
+        local port_proto
+        local port
+        local proto
+        local port_line
         local unexpected_accepts
 
         rules=$(sudo "$cmd" -S DOCKER-USER 2>/dev/null | grep "^-A DOCKER-USER " || true)
@@ -706,22 +726,48 @@ if command -v docker &>/dev/null; then
             pass "DOCKER-USER does not expose Dokploy setup port 3000 ($label)"
         fi
 
-        port_80_line=$(printf '%s\n' "$rules" | awk '/--dport 80/ && / -j ACCEPT$/ { print NR; exit }')
-        port_443_line=$(printf '%s\n' "$rules" | awk '/--dport 443/ && / -j ACCEPT$/ { print NR; exit }')
+        for port_proto in $configured_ports; do
+            port="${port_proto%/*}"
+            proto="${port_proto#*/}"
+            port_line=$(printf '%s\n' "$rules" | awk -v port="$port" -v proto="$proto" '
+                $0 ~ ("-p " proto " ") && $0 ~ ("--dport " port " ") && / -j ACCEPT$/ {
+                    print NR
+                    exit
+                }
+            ')
 
-        if [ -n "$port_80_line" ] && [ "$port_80_line" -lt "$drop_line" ] &&
-           [ -n "$port_443_line" ] && [ "$port_443_line" -lt "$drop_line" ]; then
-            pass "DOCKER-USER allows ports 80 and 443 before DROP ($label)"
+            if [ -z "$port_line" ] || [ "$port_line" -gt "$drop_line" ]; then
+                missing_ports="$missing_ports $port_proto"
+            fi
+        done
+
+        if [ -z "$missing_ports" ]; then
+            pass "DOCKER-USER allows configured public ports before DROP ($label): $configured_ports"
         else
-            fail "DOCKER-USER missing ACCEPT rules for 80/443 before DROP ($label)"
+            fail "DOCKER-USER missing configured public ports before DROP ($label):$(printf '%s' "$missing_ports")"
         fi
 
         unexpected_accepts=$(
-            printf '%s\n' "$rules" | awk -v drop_line="$drop_line" -v internal_source_regex="$internal_source_regex" '
+            printf '%s\n' "$rules" | awk \
+                -v drop_line="$drop_line" \
+                -v internal_source_regex="$internal_source_regex" \
+                -v configured_ports="$configured_ports" '
+                function is_configured_public_port(rule, parts, pair, i, port, proto) {
+                    split(configured_ports, parts, " ")
+                    for (i in parts) {
+                        split(parts[i], pair, "/")
+                        port = pair[1]
+                        proto = pair[2]
+                        if (rule ~ ("-p " proto " ") && rule ~ ("--dport " port " ")) {
+                            return 1
+                        }
+                    }
+                    return 0
+                }
                 NR < drop_line && / -j ACCEPT$/ {
                     if ($0 ~ /--ctstate RELATED,ESTABLISHED/) next
                     if ($0 ~ /-i lo /) next
-                    if ($0 ~ /--dport (80|443) /) next
+                    if (is_configured_public_port($0)) next
                     if ($0 ~ internal_source_regex) next
                     print
                 }
@@ -736,8 +782,8 @@ if command -v docker &>/dev/null; then
         fi
     }
 
-    check_docker_user_order "iptables" "IPv4" "-s (172\\.16\\.0\\.0/12|10\\.0\\.0\\.0/8)"
-    check_docker_user_order "ip6tables" "IPv6" "-s fd00::/8"
+    check_docker_user_order "iptables" "IPv4" "-s (172\\.16\\.0\\.0/12|10\\.0\\.0\\.0/8)" "$DOCKER_PUBLIC_PORTS"
+    check_docker_user_order "ip6tables" "IPv6" "-s fd00::/8" "$DOCKER_PUBLIC_PORTS"
 
     if systemctl is-active docker-firewall &>/dev/null; then
         pass "docker-firewall.service active (DOCKER-USER rules persist across Docker restarts)"

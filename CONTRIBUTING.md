@@ -20,8 +20,8 @@ Before opening a pull request:
 Run these locally before submitting:
 
 ```bash
-bash -n setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh
-shellcheck -x -s bash -S warning setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh
+bash -n setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh allow-docker-port.sh
+shellcheck -x -s bash -S warning setup.sh cleanup.sh check.sh install-dokploy.sh purge.sh allow-docker-port.sh
 git diff --check
 ```
 

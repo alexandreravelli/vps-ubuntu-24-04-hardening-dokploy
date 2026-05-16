@@ -1080,7 +1080,7 @@ sudo mkdir -p "$SCRIPTS_DIR"
 # servers that already ran setup.sh with this version.
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-${VERSION}"
 
-for script in cleanup.sh check.sh purge.sh install-dokploy.sh; do
+for script in cleanup.sh check.sh purge.sh install-dokploy.sh allow-docker-port.sh; do
     if curl -sSL --fail "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
         chmod +x "$SCRIPTS_DIR/$script"
     else

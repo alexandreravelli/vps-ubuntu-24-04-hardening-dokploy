@@ -187,7 +187,18 @@ Or directly: `sudo ./cleanup.sh ubuntu`
 
 > This also removes stale direct sudoers entries for the deleted user, validates sudoers with `visudo`, and removes temporary SSH setup files when no standalone test sshd is running.
 
-### 5. Run security audit
+### 5. Allow an extra public Docker port (optional)
+
+Docker containers are protected by a deny-by-default `DOCKER-USER` firewall. If you intentionally expose another Docker service, allow it explicitly:
+
+```bash
+cd ~/vps-hardening/
+sudo ./allow-docker-port.sh 51820/udp wg-easy
+```
+
+This updates UFW, persists the port in `/etc/vps-hardening/docker-public-ports.conf`, rebuilds `docker-firewall.service`, and keeps `check.sh` aware that the port is intentional.
+
+### 6. Run security audit
 
 ```bash
 cd ~/vps-hardening/
@@ -201,7 +212,7 @@ FAIL: 0  WARN: 0
 All configured hardening checks passed.
 ```
 
-### 6. Verify public exposure (optional)
+### 7. Verify public exposure (optional)
 
 From your local machine, scan only the ports this project cares about:
 
@@ -219,7 +230,7 @@ Expected result after Dokploy is secured:
 | 3000 | filtered or closed |
 | 2377, 4789, 7946 | filtered or closed |
 
-### 7. Clean up setup files
+### 8. Clean up setup files
 
 ```bash
 cd ~/vps-hardening/
@@ -430,6 +441,7 @@ Tested on 24.04 LTS only. Ubuntu 22.04 is **not supported** (different SSH servi
 |------|---------|
 | `setup.sh` | Server hardening — 3 phases, 7 steps, survives SSH drops |
 | `install-dokploy.sh` | Docker + Dokploy installer (run after setup.sh) |
+| `allow-docker-port.sh` | Allow one intentional public Docker port through UFW + DOCKER-USER |
 | `cleanup.sh` | Remove the default user, stale sudoers entries, and temporary SSH setup files |
 | `check.sh` | Post-install security audit, including sudo, SSH key permissions, and UFW IPv6 coverage |
 | `purge.sh` | Remove setup files from server (safe — never touches SSH keys) |
