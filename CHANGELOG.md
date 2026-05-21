@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 
 This project uses release tags named `release-<version>`.
 
+## [1.0.16] - 2026-05-21
+
+### Added
+- Added a persistent `vps-hardening-sysctl.service` to re-apply critical sysctl runtime values after boot/cloud-init.
+- Added `check.sh` visibility for the sysctl reapply service.
+
+### Changed
+- Writes kernel hardening values to `zz-vps-hardening.conf` so the hardening file sorts after common distro sysctl defaults.
+
+### Fixed
+- Fixed runtime drift where `net.ipv4.conf.*.log_martians` and `fs.suid_dumpable` could revert after setup/reboot even though the hardening check expected them.
+
 ## [1.0.15] - 2026-05-21
 
 ### Added
@@ -91,6 +103,7 @@ This project uses release tags named `release-<version>`.
 ### Changed
 - Added sudo SSH and IPv6 audit checks.
 
+[1.0.16]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.16
 [1.0.15]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.15
 [1.0.14]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.14
 [1.0.13]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.13

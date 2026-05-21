@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.15"
+VERSION="1.0.16"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Check v$VERSION"
@@ -458,6 +458,12 @@ check_sysctl "kernel.perf_event_paranoid" "3" "Perf events restricted"
 check_sysctl "net.core.bpf_jit_harden" "2" "BPF JIT hardened"
 check_sysctl "dev.tty.ldisc_autoload" "0" "TTY line discipline autoload disabled"
 check_sysctl "fs.protected_fifos" "2" "FIFO protection enabled"
+
+if systemctl is-enabled vps-hardening-sysctl.service &>/dev/null; then
+    pass "VPS hardening sysctl reapply service enabled"
+else
+    warn_check "VPS hardening sysctl reapply service not enabled (runtime values may drift after boot)"
+fi
 
 # === CORE DUMPS ===
 section "Core Dumps"

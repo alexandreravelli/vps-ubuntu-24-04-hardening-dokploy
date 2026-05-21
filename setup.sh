@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.15"
+VERSION="1.0.16"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -743,7 +743,7 @@ CURRENT_STEP=4
 progress_bar "$CURRENT_STEP" "$TOTAL_STEPS" "Kernel hardening (sysctl)"
 SETUP_PHASE="kernel-hardening"
 
-sudo tee /etc/sysctl.d/99-z-vps-hardening.conf > /dev/null << EOF
+sudo tee /etc/sysctl.d/zz-vps-hardening.conf > /dev/null << EOF
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
@@ -779,6 +779,26 @@ sudo sysctl -w net.ipv4.conf.all.log_martians=1 > /dev/null
 sudo sysctl -w net.ipv4.conf.default.log_martians=1 > /dev/null
 sudo sysctl -w fs.suid_dumpable=0 > /dev/null
 sudo sysctl -w fs.protected_fifos=2 > /dev/null
+
+sudo tee /etc/systemd/system/vps-hardening-sysctl.service > /dev/null << 'EOF'
+[Unit]
+Description=Re-apply VPS hardening sysctl runtime overrides
+After=systemd-sysctl.service cloud-final.service
+Wants=systemd-sysctl.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/sysctl -w net.ipv4.conf.all.log_martians=1
+ExecStart=/usr/sbin/sysctl -w net.ipv4.conf.default.log_martians=1
+ExecStart=/usr/sbin/sysctl -w fs.suid_dumpable=0
+ExecStart=/usr/sbin/sysctl -w fs.protected_fifos=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable vps-hardening-sysctl.service > /dev/null
+sudo systemctl start vps-hardening-sysctl.service
 log "Kernel hardening applied"
 
 echo '* hard core 0' | sudo tee /etc/security/limits.d/no-core.conf > /dev/null

@@ -4,7 +4,7 @@
 # Usage: sudo ./purge.sh
 set -euo pipefail
 
-VERSION="1.0.15"
+VERSION="1.0.16"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Purge v$VERSION"
