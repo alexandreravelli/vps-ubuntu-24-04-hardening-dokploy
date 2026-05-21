@@ -3,7 +3,7 @@
 # Usage: ./cleanup.sh [username]
 set -euo pipefail
 
-VERSION="1.0.14"
+VERSION="1.0.15"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Cleanup v$VERSION"
@@ -132,7 +132,7 @@ gum style \
     "Remove the old default user"
 echo ""
 
-CURRENT_USER=$(whoami)
+CURRENT_USER="${SUDO_USER:-$(whoami)}"
 if [ $# -ge 1 ]; then
     TARGET_USER="$1"
 else

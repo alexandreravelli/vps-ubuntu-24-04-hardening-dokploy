@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.14"
+VERSION="1.0.15"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Check v$VERSION"
@@ -148,15 +148,15 @@ if [ -f /etc/ssh/sshd_config.d/hardening.conf ]; then
     fi
 
     if grep -q "PasswordAuthentication no" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
-        pass "Password authentication disabled"
+        pass "Hardening file requests password authentication disabled"
     elif grep -q "PasswordAuthentication yes" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
-        warn_check "Password authentication still ENABLED (run final hardening step)"
+        warn_check "Hardening file still requests password authentication enabled (run final hardening step)"
     fi
 
     if grep -q "PubkeyAuthentication yes" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
-        pass "Public key authentication enabled"
+        pass "Hardening file requests public key authentication enabled"
     else
-        fail "Public key authentication NOT enabled"
+        fail "Hardening file does not request public key authentication"
     fi
 
     if grep -q "MaxAuthTries" /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null; then
@@ -202,6 +202,56 @@ if /usr/sbin/sshd -t 2>/dev/null; then
     pass "SSH config valid"
 else
     fail "SSH config validation failed -- run: sudo /usr/sbin/sshd -t"
+fi
+
+CONFLICTING_SSH_DROPINS=$(
+    for file in /etc/ssh/sshd_config.d/*.conf; do
+        [ -e "$file" ] || continue
+        if [ "$file" = "/etc/ssh/sshd_config.d/hardening.conf" ] ||
+           [ "$file" = "/etc/ssh/sshd_config.d/zz-setup-keepalive.conf" ]; then
+            continue
+        fi
+        grep -HnE '^[[:space:]]*(PasswordAuthentication|PubkeyAuthentication|KbdInteractiveAuthentication|PermitRootLogin|AuthorizedKeysFile|AllowUsers)[[:space:]]+' "$file" 2>/dev/null || true
+    done
+)
+if [ -n "$CONFLICTING_SSH_DROPINS" ]; then
+    fail "Conflicting SSH auth directives found in other sshd_config.d files"
+    printf '%s\n' "$CONFLICTING_SSH_DROPINS" | sed 's/^/    /'
+else
+    pass "No conflicting SSH auth directives in other drop-ins"
+fi
+
+if SSHD_EFFECTIVE=$(/usr/sbin/sshd -T 2>/dev/null); then
+    EFFECTIVE_PASSWORD_AUTH=$(printf '%s\n' "$SSHD_EFFECTIVE" | awk '$1 == "passwordauthentication" {print $2; exit}')
+    EFFECTIVE_PUBKEY_AUTH=$(printf '%s\n' "$SSHD_EFFECTIVE" | awk '$1 == "pubkeyauthentication" {print $2; exit}')
+    EFFECTIVE_KBD_AUTH=$(printf '%s\n' "$SSHD_EFFECTIVE" | awk '$1 == "kbdinteractiveauthentication" {print $2; exit}')
+    EFFECTIVE_ALLOW_USERS=$(printf '%s\n' "$SSHD_EFFECTIVE" | awk '$1 == "allowusers" {$1=""; print $0; exit}' | xargs)
+
+    if [ "$EFFECTIVE_PASSWORD_AUTH" = "no" ]; then
+        pass "Effective password authentication disabled"
+    else
+        fail "Effective password authentication is '$EFFECTIVE_PASSWORD_AUTH' (check cloud-init or other sshd_config.d drop-ins)"
+    fi
+
+    if [ "$EFFECTIVE_PUBKEY_AUTH" = "yes" ]; then
+        pass "Effective public key authentication enabled"
+    else
+        fail "Effective public key authentication is '$EFFECTIVE_PUBKEY_AUTH'"
+    fi
+
+    if [ "$EFFECTIVE_KBD_AUTH" = "no" ]; then
+        pass "Effective keyboard-interactive authentication disabled"
+    else
+        fail "Effective keyboard-interactive authentication is '$EFFECTIVE_KBD_AUTH'"
+    fi
+
+    if [ -n "$EFFECTIVE_ALLOW_USERS" ]; then
+        pass "Effective AllowUsers: $EFFECTIVE_ALLOW_USERS"
+    else
+        warn_check "Effective AllowUsers not set"
+    fi
+else
+    fail "Could not read effective SSH config -- run: sudo /usr/sbin/sshd -T"
 fi
 
 if [ -f /etc/systemd/system/ssh.socket.d/override.conf ]; then
@@ -676,7 +726,7 @@ if command -v docker &>/dev/null; then
             [ -n "${port_proto:-}" ] || continue
             case "$port_proto" in \#*) continue ;; esac
             if echo "$port_proto" | grep -qE '^[0-9]+/(tcp|udp)$' &&
-               ! printf '%s\n' $DOCKER_PUBLIC_PORTS | grep -Fxq "$port_proto"; then
+               ! printf '%s\n' "$DOCKER_PUBLIC_PORTS" | tr ' ' '\n' | grep -Fxq "$port_proto"; then
                 DOCKER_PUBLIC_PORTS="$DOCKER_PUBLIC_PORTS $port_proto"
             fi
         done < "$DOCKER_PUBLIC_PORTS_CONFIG"

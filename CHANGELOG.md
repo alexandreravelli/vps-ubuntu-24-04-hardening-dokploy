@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 
 This project uses release tags named `release-<version>`.
 
+## [1.0.15] - 2026-05-21
+
+### Added
+- Added effective SSH configuration checks using `sshd -T` so `check.sh` detects cloud-init or other drop-ins that override `hardening.conf`.
+- Added detection of conflicting SSH authentication directives in `/etc/ssh/sshd_config.d/*.conf`.
+- Added cloud-init password-auth persistence control via `ssh_pwauth: false`.
+
+### Changed
+- `setup.sh` now neutralizes conflicting SSH auth drop-ins safely, with backups, before final key-only SSH hardening.
+- `setup.sh` now copies local post-install scripts during local checkout installs, preventing fresh-install tests from pulling older release scripts.
+- Auto-lockdown now validates effective SSH password authentication before closing recovery access.
+
+### Fixed
+- Fixed false PASS reports where `check.sh` said password authentication was disabled while OpenSSH still allowed password login.
+- Fixed rollback behavior to restore backed-up SSH drop-ins and avoid removing unrelated `ssh.socket.d` drop-ins.
+- Fixed old-user cleanup detection so sudo-launched cleanup does not confuse the active user with `root`.
+
 ## [1.0.14] - 2026-05-16
 
 ### Added
@@ -74,6 +91,7 @@ This project uses release tags named `release-<version>`.
 ### Changed
 - Added sudo SSH and IPv6 audit checks.
 
+[1.0.15]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.15
 [1.0.14]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.14
 [1.0.13]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.13
 [1.0.12]: https://github.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/releases/tag/release-1.0.12

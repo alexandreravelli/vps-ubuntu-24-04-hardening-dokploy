@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-VERSION="1.0.14"
+VERSION="1.0.15"
 
 if [[ "${1:-}" == "--version" || "${1:-}" == "-v" ]]; then
     echo "VPS Hardening Script v$VERSION"
@@ -62,6 +62,17 @@ CURRENT_STEP=0
 
 # === CLEANUP TRAP ===
 SETUP_PHASE="init"
+restore_ssh_auth_dropin_backups() {
+    local backup original
+
+    for backup in /etc/ssh/sshd_config.d/*.pre-hardening.bak; do
+        [ -e "$backup" ] || continue
+        original="${backup%.pre-hardening.bak}"
+        sudo cp "$backup" "$original" 2>/dev/null || true
+        sudo rm -f "$backup" 2>/dev/null || true
+    done
+}
+
 cleanup_on_error() {
     local exit_code=$?
     if [ "$exit_code" -ne 0 ]; then
@@ -82,9 +93,12 @@ cleanup_on_error() {
             echo ""
             printf "  \033[1;33m[!] Restoring SSH access on port 22...\033[0m\n"
             sudo ufw allow 22/tcp 2>/dev/null || true
+            restore_ssh_auth_dropin_backups
+            sudo rm -f /etc/cloud/cloud.cfg.d/99-vps-hardening-ssh.cfg 2>/dev/null || true
             sudo rm -f /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null || true
             sudo rm -f /etc/ssh/sshd_config.d/zz-setup-keepalive.conf 2>/dev/null || true
-            sudo rm -rf /etc/systemd/system/ssh.socket.d 2>/dev/null || true
+            sudo rm -f /etc/systemd/system/ssh.socket.d/override.conf 2>/dev/null || true
+            sudo rmdir /etc/systemd/system/ssh.socket.d 2>/dev/null || true
             sudo systemctl daemon-reload 2>/dev/null || true
             printf "  \033[1;33m[!] Port 22 restored. Your session should be intact.\033[0m\n"
         fi
@@ -216,6 +230,47 @@ error() {
     fi
     echo "[ERROR] $(date +%H:%M:%S) $1" >> "$LOG_FILE" 2>/dev/null || true
     exit 1
+}
+
+neutralize_ssh_auth_dropins() {
+    local file backup
+    sudo mkdir -p /etc/ssh/sshd_config.d
+
+    for file in /etc/ssh/sshd_config.d/*.conf; do
+        [ -e "$file" ] || continue
+        case "$file" in
+            /etc/ssh/sshd_config.d/hardening.conf|/etc/ssh/sshd_config.d/zz-setup-keepalive.conf)
+                continue
+                ;;
+        esac
+
+        if sudo grep -Eq '^[[:space:]]*(PasswordAuthentication|PubkeyAuthentication|KbdInteractiveAuthentication|PermitRootLogin|AuthorizedKeysFile|AllowUsers)[[:space:]]+' "$file"; then
+            backup="${file}.pre-hardening.bak"
+            [ -f "$backup" ] || sudo cp "$file" "$backup"
+            sudo sed -i -E 's/^([[:space:]]*)(PasswordAuthentication|PubkeyAuthentication|KbdInteractiveAuthentication|PermitRootLogin|AuthorizedKeysFile|AllowUsers)[[:space:]]+/# disabled by vps-hardening: &/' "$file"
+            log "Neutralized conflicting SSH auth directives in $(basename "$file")"
+        fi
+    done
+}
+
+assert_effective_ssh_option() {
+    local option="$1"
+    local expected="$2"
+    local actual
+
+    actual=$(sudo /usr/sbin/sshd -T 2>/dev/null | awk -v opt="$option" '$1 == opt {print $2; exit}')
+    if [ "$actual" != "$expected" ]; then
+        error "Effective SSH option '$option' is '$actual' (expected '$expected'). Check /etc/ssh/sshd_config.d/*.conf for conflicting directives."
+    fi
+}
+
+disable_cloud_init_password_auth() {
+    if [ -d /etc/cloud/cloud.cfg.d ]; then
+        sudo tee /etc/cloud/cloud.cfg.d/99-vps-hardening-ssh.cfg > /dev/null << 'EOF'
+ssh_pwauth: false
+EOF
+        log "Configured cloud-init to keep SSH password authentication disabled"
+    fi
 }
 
 input_banner() {
@@ -970,6 +1025,7 @@ fi
 # Write SSH hardening config (port 22 kept open until CONFIRM)
 # Ciphers include fallbacks (aes256-ctr, hmac-sha2-256) for Termius compatibility
 sudo mkdir -p /etc/ssh/sshd_config.d
+neutralize_ssh_auth_dropins
 sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port 22
 Port $SSH_PORT
@@ -1076,20 +1132,37 @@ sudo chmod 600 "$USER_HOME/.vps_setup_summary"
 # Download post-install scripts into a dedicated subdirectory
 SCRIPTS_DIR="$USER_HOME/vps-hardening"
 sudo mkdir -p "$SCRIPTS_DIR"
+LOCAL_SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+USED_LOCAL_SCRIPTS=false
+LOCAL_SCRIPT_SET_COMPLETE=true
+POST_INSTALL_SCRIPTS=(cleanup.sh check.sh purge.sh install-dokploy.sh allow-docker-port.sh remove-docker-port.sh)
 # Pin to release tag so a compromised main branch cannot inject code into
 # servers that already ran setup.sh with this version.
 REPO_BASE="https://raw.githubusercontent.com/alexandreravelli/vps-ubuntu-24-04-hardening-dokploy/release-${VERSION}"
 
-for script in cleanup.sh check.sh purge.sh install-dokploy.sh allow-docker-port.sh remove-docker-port.sh; do
-    if curl -sSL --fail "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
-        chmod +x "$SCRIPTS_DIR/$script"
+for script in "${POST_INSTALL_SCRIPTS[@]}"; do
+    [ -f "$LOCAL_SCRIPT_DIR/$script" ] || LOCAL_SCRIPT_SET_COMPLETE=false
+done
+
+for script in "${POST_INSTALL_SCRIPTS[@]}"; do
+    if [ "$LOCAL_SCRIPT_SET_COMPLETE" = true ]; then
+        if [ "$(realpath "$LOCAL_SCRIPT_DIR/$script" 2>/dev/null || echo "$LOCAL_SCRIPT_DIR/$script")" != \
+             "$(realpath "$SCRIPTS_DIR/$script" 2>/dev/null || echo "$SCRIPTS_DIR/$script")" ]; then
+            sudo cp "$LOCAL_SCRIPT_DIR/$script" "$SCRIPTS_DIR/$script"
+        fi
+        sudo chmod +x "$SCRIPTS_DIR/$script"
+        USED_LOCAL_SCRIPTS=true
+    elif curl -sSL --fail "$REPO_BASE/$script" -o "$SCRIPTS_DIR/$script" 2>/dev/null; then
+        sudo chmod +x "$SCRIPTS_DIR/$script"
     else
         error "Could not download $script from release-${VERSION}"
     fi
 done
 
 # Integrity check (protects against network corruption, not repo compromise)
-if curl -sSL --fail "$REPO_BASE/SHA256SUMS" -o "$SCRIPTS_DIR/SHA256SUMS" 2>/dev/null; then
+if [ "$USED_LOCAL_SCRIPTS" = true ]; then
+    log "Post-install scripts copied from local checkout"
+elif curl -sSL --fail "$REPO_BASE/SHA256SUMS" -o "$SCRIPTS_DIR/SHA256SUMS" 2>/dev/null; then
     pushd "$SCRIPTS_DIR" > /dev/null
     if sha256sum -c SHA256SUMS --status 2>/dev/null; then
         log "Downloaded scripts integrity verified (SHA256)"
@@ -1117,6 +1190,22 @@ schedule_auto_lockdown() {
 if command -v at &>/dev/null; then
     cat << LOCKDOWN_EOF | at now + 24 hours 2>/dev/null || true
 if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null; then
+    mkdir -p /etc/ssh/sshd_config.d
+    for file in /etc/ssh/sshd_config.d/*.conf; do
+        [ -e "\$file" ] || continue
+        case "\$file" in
+            /etc/ssh/sshd_config.d/hardening.conf|/etc/ssh/sshd_config.d/zz-setup-keepalive.conf)
+                continue
+                ;;
+        esac
+        if grep -Eq '^[[:space:]]*(PasswordAuthentication|PubkeyAuthentication|KbdInteractiveAuthentication|PermitRootLogin|AuthorizedKeysFile|AllowUsers)[[:space:]]+' "\$file"; then
+            backup="\${file}.pre-hardening.bak"
+            [ -f "\$backup" ] || cp "\$file" "\$backup"
+            sed -i -E 's/^([[:space:]]*)(PasswordAuthentication|PubkeyAuthentication|KbdInteractiveAuthentication|PermitRootLogin|AuthorizedKeysFile|AllowUsers)[[:space:]]+/# disabled by vps-hardening: &/' "\$file"
+        fi
+    done
+    mkdir -p /etc/cloud/cloud.cfg.d
+    printf 'ssh_pwauth: false\n' > /etc/cloud/cloud.cfg.d/99-vps-hardening-ssh.cfg
     # Kill standalone sshd
     [ -f /run/sshd-hardened.pid ] && kill "\$(cat /run/sshd-hardened.pid)" 2>/dev/null; rm -f /run/sshd-hardened.pid
     # Close port 22 in SSH config
@@ -1124,6 +1213,8 @@ if grep -q 'STATUS=pending_confirm' '$USER_HOME/.vps_setup_summary' 2>/dev/null;
     sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
     # Restrict SSH to the admin user only
     grep -q 'AllowUsers' /etc/ssh/sshd_config.d/hardening.conf || echo 'AllowUsers $NEW_USER' >> /etc/ssh/sshd_config.d/hardening.conf
+    /usr/sbin/sshd -t || exit 1
+    /usr/sbin/sshd -T | grep -q '^passwordauthentication no$' || exit 1
     # Write socket override and apply
     mkdir -p /etc/systemd/system/ssh.socket.d
     printf '[Socket]\nListenStream=\nListenStream=0.0.0.0:%s\nListenStream=[::]:%s\n' '$SSH_PORT' '$SSH_PORT' > /etc/systemd/system/ssh.socket.d/override.conf
@@ -1203,6 +1294,8 @@ if gum confirm "Did the NEW SSH connection work?"; then
         done
         printf "\r  \033[1;31mRebooting now...\033[0m\n"
         echo ""
+        neutralize_ssh_auth_dropins
+        disable_cloud_init_password_auth
         sudo tee /etc/ssh/sshd_config.d/hardening.conf > /dev/null << EOF
 Port $SSH_PORT
 PermitRootLogin no
@@ -1231,6 +1324,9 @@ MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,h
 KexAlgorithms sntrup761x25519-sha512@openssh.com,curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512
 EOF
         sudo /usr/sbin/sshd -t || error "SSH config validation failed"
+        assert_effective_ssh_option "passwordauthentication" "no"
+        assert_effective_ssh_option "pubkeyauthentication" "yes"
+        assert_effective_ssh_option "kbdinteractiveauthentication" "no"
 
         # Write ssh.socket override for next reboot (do NOT restart ssh.socket —
         # it fails when ssh.service is active and causes ECONNREFUSED).
@@ -1294,8 +1390,11 @@ else
     echo ""
     printf "  Fix the issue, then run these commands manually:\n"
     echo ""
+    printf "  sudo find /etc/ssh/sshd_config.d -maxdepth 1 -type f -name '*.conf' ! -name 'hardening.conf' ! -name 'zz-setup-keepalive.conf' -exec sed -i -E 's/^([[:space:]]*)(PasswordAuthentication|PubkeyAuthentication|KbdInteractiveAuthentication|PermitRootLogin|AuthorizedKeysFile|AllowUsers)[[:space:]]+/# disabled by vps-hardening: \\0/' {} \\;\n"
+    printf "  sudo mkdir -p /etc/cloud/cloud.cfg.d && printf 'ssh_pwauth: false\\n' | sudo tee /etc/cloud/cloud.cfg.d/99-vps-hardening-ssh.cfg\n"
     printf "  sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf\n"
     printf "  sudo sed -i '/^Port 22\$/d' /etc/ssh/sshd_config.d/hardening.conf\n"
+    printf "  sudo sshd -t && sudo sshd -T | grep -Ei 'passwordauthentication|pubkeyauthentication|kbdinteractiveauthentication|allowusers|port'\n"
     printf "  sudo systemctl daemon-reload\n"
     printf "  sudo systemctl restart ssh.socket\n"
     printf "  sudo ufw delete allow 22/tcp\n"
@@ -1318,7 +1417,7 @@ else
     gum style --bold --foreground 6 "  Optional: Remove old user '$OLD_USER'"
     echo ""
 
-    if [ "$OLD_USER" = "$(whoami)" ]; then
+    if [ "$OLD_USER" = "$CURRENT_USER" ]; then
         warn "Cannot auto-remove '$OLD_USER' — you're currently logged in as this user"
         echo ""
         printf "  To remove this user safely:\n"
